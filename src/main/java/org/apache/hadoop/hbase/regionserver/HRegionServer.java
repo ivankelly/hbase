@@ -1842,7 +1842,11 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
       // from HRegion.RegionScanner, IF its filter if any is done with the scan
       // and wants to tell the client to stop the scan. This is done by passing
       // a null result.
-      return ((HRegion.RegionScanner) s).isFilterDone() && results.isEmpty() ? null
+      boolean firstcondition = true;
+      if (s instanceof HRegion.RegionScanner) {
+	  firstcondition = ((HRegion.RegionScanner) s).isFilterDone();
+      }
+      return firstcondition && results.isEmpty() ? null
           : results.toArray(new Result[0]);
     } catch (Throwable t) {
       if (t instanceof NotServingRegionException) {
