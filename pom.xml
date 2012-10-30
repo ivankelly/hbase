@@ -847,7 +847,7 @@
     <commons-configuration.version>1.6</commons-configuration.version>
     <commons-io.version>2.1</commons-io.version>
     <metrics-core.version>2.1.2</metrics-core.version>
-    <guava.version>r09</guava.version>
+    <guava.version>12.0.1</guava.version>
     <jackson.version>1.8.8</jackson.version>
     <jasper.version>5.5.23</jasper.version>
     <jaxb-api.version>2.1</jaxb-api.version>

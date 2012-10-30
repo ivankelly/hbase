@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.hfile.Compression;
 import org.apache.hadoop.hbase.io.hfile.Compression.Algorithm;
+import org.apache.hadoop.hbase.mapreduce.MapreduceTestingShim;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
@@ -72,6 +73,7 @@ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MiniMRCluster;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -1188,11 +1190,26 @@ public class HBaseTestingUtility {
     c.set("mapred.output.dir", c.get("hadoop.tmp.dir"));
     mrCluster = new MiniMRCluster(servers,
       FileSystem.get(c).getUri().toString(), 1);
+    JobConf jobConf = MapreduceTestingShim.getJobConf(mrCluster);
     LOG.info("Mini mapreduce cluster started");
-    c.set("mapred.job.tracker",
-        mrCluster.createJobConf().get("mapred.job.tracker"));
+    if (jobConf == null) {
+        jobConf = mrCluster.createJobConf();
+    }
+    jobConf.set("mapred.local.dir",
+                conf.get("mapred.local.dir")); //Hadoop MiniMR overwrites this while it should not
+
+     conf.set("mapred.job.tracker", jobConf.get("mapred.job.tracker"));   
     /* this for mrv2 support */
     conf.set("mapreduce.framework.name", "yarn");
+    String rmAdress = jobConf.get("yarn.resourcemanager.address");
+    if (rmAdress != null) {
+      conf.set("yarn.resourcemanager.address", rmAdress);
+    }
+    String schedulerAdress =
+        jobConf.get("yarn.resourcemanager.scheduler.address");
+    if (schedulerAdress != null) {
+      conf.set("yarn.resourcemanager.scheduler.address", schedulerAdress);
+    }
   }
 
   /**
