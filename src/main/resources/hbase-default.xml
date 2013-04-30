@@ -828,7 +828,14 @@
     <description>
     If true, the BK WAL mechanism will be used. Otherwise, the standard one is used. 
     </description>
-  </property>   
+  </property>
+  <property>
+    <name>hbase.bk.wal.dummy</name>
+    <value>false</value>
+    <description>
+    For hacking. 
+    </description>
+  </property>
   <!-- End of properties that are related to the WAL implementation with BK -->
   
 </configuration>
