@@ -315,6 +315,9 @@
             <forkedProcessTimeoutInSeconds>900</forkedProcessTimeoutInSeconds>
             <argLine>-enableassertions -Xmx1400m -Djava.security.egd=file:/dev/./urandom</argLine>
             <redirectTestOutputToFile>true</redirectTestOutputToFile>
+            <excludes>
+              <exclude>**/*SmokeTest.java</exclude>
+            </excludes>
           </configuration>
         </plugin>
         <plugin>
@@ -1822,6 +1825,25 @@
         </plugins>
       </build>
     </profile>
+    
+      <!-- Profile to run smoke tests on HBase-BK integration -->
+    <profile>
+      <id>smoke-tests</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <includes>
+                <include>**/*SmokeTest.java</include>
+              </includes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    
   </profiles>
  
   <!-- See http://jira.codehaus.org/browse/MSITE-443 why the settings need to be here and not in pluginManagement. -->

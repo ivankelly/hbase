@@ -818,4 +818,24 @@
      value to 0.
      </description>
    </property>
+   
+  <!--
+  Beginning of properties that are related to the WAL implementation with BK. The prefix used is "hbase.bk.wal" 
+  -->
+  <property>
+    <name>hbase.bk.wal.enabled</name>
+    <value>false</value>
+    <description>
+    If true, the BK WAL mechanism will be used. Otherwise, the standard one is used. 
+    </description>
+  </property>
+  <property>
+    <name>hbase.bk.wal.dummy</name>
+    <value>false</value>
+    <description>
+    For hacking. 
+    </description>
+  </property>
+  <!-- End of properties that are related to the WAL implementation with BK -->
+  
 </configuration>
