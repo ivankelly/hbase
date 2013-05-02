@@ -1837,6 +1837,12 @@
             <configuration>
               <includes>
                 <include>**/*SmokeTest.java</include>
+		<include>**/TestHLog*.java</include>
+		<include>**/TestWALReplay.java</include>
+		<include>**/TestCompaction.java</include>
+		<include>**/TestLogRoll*.java</include>
+		<include>**/TestHRegion.java</include>
+		<include>**/TestLocalHBaseCluster.java</include>
               </includes>
             </configuration>
           </plugin>
