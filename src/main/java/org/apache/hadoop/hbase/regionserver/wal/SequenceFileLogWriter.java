@@ -20,6 +20,8 @@
 
 package org.apache.hadoop.hbase.regionserver.wal;
 
+import java.net.URI;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
@@ -73,9 +75,9 @@ public class SequenceFileLogWriter implements HLog.Writer {
   }
 
   @Override
-  public void init(FileSystem fs, Path path, Configuration conf)
+  public void init(FileSystem fs, URI uri, Configuration conf)
   throws IOException {
-
+    Path path = new Path(uri);
     if (null == keyClass) {
       keyClass = HLog.getKeyClass(conf);
     }

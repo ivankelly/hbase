@@ -28,6 +28,7 @@ import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URLEncoder;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -165,7 +166,7 @@ public class HLog implements Syncable {
   }
 
   public interface Writer {
-    void init(FileSystem fs, Path path, Configuration c) throws IOException;
+    void init(FileSystem fs, URI uri, Configuration c) throws IOException;
     void close() throws IOException;
     void sync() throws IOException;
     void append(Entry entry) throws IOException;
@@ -709,7 +710,8 @@ public class HLog implements Syncable {
             SequenceFileLogWriter.class, Writer.class);
       }
       HLog.Writer writer = (HLog.Writer) logWriterClass.newInstance();
-      writer.init(fs, path, conf);
+      URI uri = path.toUri(); // FIXME: createWriter should get URI, not path
+      writer.init(fs, uri, conf);
       return writer;
     } catch (Exception e) {
       throw new IOException("cannot get log writer", e);
