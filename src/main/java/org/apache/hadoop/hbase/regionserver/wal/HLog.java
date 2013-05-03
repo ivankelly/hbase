@@ -591,8 +591,9 @@ public class HLog implements Syncable {
       // as less as possible the incoming writes
       long currentFilenum = this.filenum;
       this.filenum = System.currentTimeMillis();
-      Path newPath = computeFilename();
-      HLog.Writer nextWriter = this.createWriterInstance(fs, newPath, conf);
+      Path newPath = computeFilename(); // FIXME (Fran): computeFilename() now should return a URI instead of Path
+      URI newUri = newPath.toUri();
+      HLog.Writer nextWriter = this.createWriterInstance(fs, newUri, conf);
       // Can we get at the dfsclient outputstream?  If an instance of
       // SFLW, it'll have done the necessary reflection to get at the
       // protected field name.
@@ -653,14 +654,13 @@ public class HLog implements Syncable {
    * extend other methods like rollWriter().
    * 
    * @param fs
-   * @param path
+   * @param uri
    * @param conf
    * @return Writer instance
    * @throws IOException
    */
-  protected Writer createWriterInstance(final FileSystem fs, final Path path,
+  protected Writer createWriterInstance(final FileSystem fs, final URI uri,
       final Configuration conf) throws IOException {
-    URI uri = path.toUri(); // FIXME (Fran): createWriterInstance should get URI, not path
     return createWriter(fs, uri, conf);
   }
 
