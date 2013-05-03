@@ -129,7 +129,8 @@ public class HLog implements Syncable {
   static final String RECOVERED_LOG_TMPFILE_SUFFIX = ".temp";
   
   private final FileSystem fs;
-  private final Path dir;
+  private final Path dir; // FIXME (Fran): Delete me and use dirUri
+  private final URI dirUri; // BREADCRUMB (Fran): This mimics dir but as URI
   private final Configuration conf;
   // Listeners that are called on WAL events.
   private List<WALActionsListener> listeners =
@@ -369,6 +370,7 @@ public class HLog implements Syncable {
     super();
     this.fs = fs;
     this.dir = dir;
+    this.dirUri = dir.toUri(); // BREADCRUMB (Fran): This mimics dir but as URI
     this.conf = conf;
     if (listeners != null) {
       for (WALActionsListener i: listeners) {
@@ -592,8 +594,10 @@ public class HLog implements Syncable {
       long currentFilenum = this.filenum;
       this.filenum = System.currentTimeMillis();
       Path newPath = computeFilename(); // FIXME (Fran): computeFilename() now should return a URI instead of Path
-      URI newUri = newPath.toUri();
+      URI newUri = computeFilenameAsUri(); // FIXME (Fran): remove me whem computeFilename returns a URI
       HLog.Writer nextWriter = this.createWriterInstance(fs, newUri, conf);
+      LOG.info("NEW URI " + newUri.toString());
+      LOG.info("NEW Path " + newPath.toString());
       // Can we get at the dfsclient outputstream?  If an instance of
       // SFLW, it'll have done the necessary reflection to get at the
       // protected field name.
@@ -867,6 +871,7 @@ public class HLog implements Syncable {
     }
   }
 
+  //FIXME (Fran): Put the code on the method below on me!
   /**
    * This is a convenience method that computes a new filename with a given
    * using the current HLog file-number
@@ -876,6 +881,17 @@ public class HLog implements Syncable {
     return computeFilename(this.filenum);
   }
 
+  // BREADCRUMB (Fran): This should return a URI so the idea is to deprecate the previous method
+  /**
+   * This is a convenience method that computes a new filename with a given
+   * using the current HLog file-number
+   * @return URI
+   */
+  protected URI computeFilenameAsUri() {
+    return computeFilenameAsUri(this.filenum);
+  }
+
+  // FIXME (Fran): Put the code on the method below on me!
   /**
    * This is a convenience method that computes a new filename with a given
    * file-number.
@@ -887,6 +903,22 @@ public class HLog implements Syncable {
       throw new RuntimeException("hlog file number can't be < 0");
     }
     return new Path(dir, prefix + "." + filenum);
+  }
+  
+  // BREADCRUMB (Fran): This should return a URI so the idea is to deprecate the previous method
+  /**
+   * This is a convenience method that computes a new filename with a given
+   * file-number.
+   * @param filenum to use
+   * @return URI
+   */
+  protected URI computeFilenameAsUri(long filenum) {
+    if (filenum < 0) {
+      throw new RuntimeException("hlog file number can't be < 0");
+    }
+//    String tail = "/" + prefix + "." + filenum; // Doesn't work for all the cases (TestLogRolling fails)
+//    return URI.create(dirUri.toASCIIString() + tail); // Doesn't work for all the cases (TestLogRolling fails)
+    return (new Path(new Path(dirUri), prefix + "." + filenum)).toUri(); // BREADCRUMB (Fran): Take a look at me
   }
 
   /**

@@ -681,6 +681,22 @@ public class TestHLog  {
     Coprocessor c = host.findCoprocessor(SampleRegionWALObserver.class.getName());
     assertNotNull(c);
   }
+  
+  /**
+   * BREADCRUMB (Fran): Test
+   */
+  @Test
+  public void testComputeFilenameReturnsTheSameStringAsUriAndAsPath() throws IOException {
+
+    final byte [] tableName = Bytes.toBytes(getName());
+    final byte [] rowName = tableName;
+    Path logdir = new Path(hbaseDir, HConstants.HREGION_LOGDIR_NAME);
+    HLog log = new HLog(fs, logdir, oldLogDir, conf);
+    assertTrue(log.computeFilename().toString().equals(log.computeFilenameAsUri().toString()));
+    if (log != null) {
+      log.closeAndDelete();
+    }
+  }
 
   private void addEdits(HLog log, HRegionInfo hri, byte [] tableName,
                         int times) throws IOException {
