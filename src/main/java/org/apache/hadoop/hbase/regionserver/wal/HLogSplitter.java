@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.net.URI;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -864,7 +865,8 @@ public class HLogSplitter {
    */
   protected Writer createWriter(FileSystem fs, Path logfile, Configuration conf)
       throws IOException {
-    return HLog.createWriter(fs, logfile, conf);
+    URI logfileUri = logfile.toUri(); // FIXME (Fran): createWriter now should get URI, not path
+    return HLog.createWriter(fs, logfileUri, conf);
   }
 
   /**

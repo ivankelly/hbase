@@ -27,6 +27,7 @@ import static org.junit.Assert.fail;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -978,8 +979,9 @@ public class TestHLogSplit {
         }
  
         fs.mkdirs(new Path(tableDir, region));
+        URI julietLogUri = julietLog.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path
         HLog.Writer writer = HLog.createWriter(fs,
-            julietLog, conf);
+            julietLogUri, conf);
         appendEntry(writer, "juliet".getBytes(), ("juliet").getBytes(),
             ("r").getBytes(), FAMILY, QUALIFIER, VALUE, 0);
         writer.close();
@@ -1127,7 +1129,8 @@ public class TestHLogSplit {
         conf, hbaseDir, hlogDir, oldLogDir, fs) {
       protected HLog.Writer createWriter(FileSystem fs, Path logfile, Configuration conf)
       throws IOException {
-        HLog.Writer writer = HLog.createWriter(fs, logfile, conf);
+        URI logfileUri = logfile.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path
+        HLog.Writer writer = HLog.createWriter(fs, logfileUri, conf);
         // After creating writer, simulate region's
         // replayRecoveredEditsIfAny() which gets SplitEditFiles of this
         // region and delete them, excluding files with '.temp' suffix.
@@ -1182,7 +1185,9 @@ public class TestHLogSplit {
     makeRegionDirs(fs, regions);
     fs.mkdirs(hlogDir);
     for (int i = 0; i < writers; i++) {
-      writer[i] = HLog.createWriter(fs, new Path(hlogDir, HLOG_FILE_PREFIX + i), conf);
+      Path path = new Path(hlogDir, HLOG_FILE_PREFIX + i);
+      URI uri = path.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path
+      writer[i] = HLog.createWriter(fs, uri, conf);
       for (int j = 0; j < entries; j++) {
         int prefix = 0;
         for (String region : regions) {
@@ -1312,8 +1317,10 @@ public class TestHLogSplit {
 
   private void injectEmptyFile(String suffix, boolean closeFile)
           throws IOException {
+    Path path = new Path(hlogDir, HLOG_FILE_PREFIX + suffix);
+    URI uri = path.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path  
     HLog.Writer writer = HLog.createWriter(
-            fs, new Path(hlogDir, HLOG_FILE_PREFIX + suffix), conf);
+            fs, uri, conf);
     if (closeFile) writer.close();
   }
 

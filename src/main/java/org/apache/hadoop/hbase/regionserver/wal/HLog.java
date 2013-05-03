@@ -660,7 +660,8 @@ public class HLog implements Syncable {
    */
   protected Writer createWriterInstance(final FileSystem fs, final Path path,
       final Configuration conf) throws IOException {
-    return createWriter(fs, path, conf);
+    URI uri = path.toUri(); // FIXME (Fran): createWriterInstance should get URI, not path
+    return createWriter(fs, uri, conf);
   }
 
   /**
@@ -696,21 +697,20 @@ public class HLog implements Syncable {
 
   /**
    * Get a writer for the WAL.
-   * @param path
+   * @param uri
    * @param conf
    * @return A WAL writer.  Close when done with it.
    * @throws IOException
    */
   public static Writer createWriter(final FileSystem fs,
-      final Path path, Configuration conf)
+      final URI uri, Configuration conf)
   throws IOException {
     try {
       if (logWriterClass == null) {
         logWriterClass = conf.getClass("hbase.regionserver.hlog.writer.impl",
             SequenceFileLogWriter.class, Writer.class);
       }
-      HLog.Writer writer = (HLog.Writer) logWriterClass.newInstance();
-      URI uri = path.toUri(); // FIXME: createWriter should get URI, not path
+      HLog.Writer writer = (HLog.Writer) logWriterClass.newInstance();      
       writer.init(fs, uri, conf);
       return writer;
     } catch (Exception e) {

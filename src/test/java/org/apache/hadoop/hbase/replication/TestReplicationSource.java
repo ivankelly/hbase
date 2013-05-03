@@ -22,6 +22,8 @@ package org.apache.hadoop.hbase.replication;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+import java.net.URI;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -80,7 +82,8 @@ public class TestReplicationSource {
     Path logPath = new Path(logDir, "log");
     if (!FS.exists(logDir)) FS.mkdirs(logDir);
     if (!FS.exists(oldLogDir)) FS.mkdirs(oldLogDir);
-    HLog.Writer writer = HLog.createWriter(FS, logPath, conf);
+    URI logPathUri = logPath.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path
+    HLog.Writer writer = HLog.createWriter(FS, logPathUri, conf);
     for(int i = 0; i < 3; i++) {
       byte[] b = Bytes.toBytes(Integer.toString(i));
       KeyValue kv = new KeyValue(b,b,b);

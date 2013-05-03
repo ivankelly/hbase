@@ -21,6 +21,7 @@ package org.apache.hadoop.hbase.regionserver;
 
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -210,7 +211,8 @@ public class TestHRegion extends HBaseTestCase {
       for (long i = minSeqId; i <= maxSeqId; i += 10) {
         Path recoveredEdits = new Path(recoveredEditsDir, String.format("%019d", i));
         fs.create(recoveredEdits);
-        HLog.Writer writer = HLog.createWriter(fs, recoveredEdits, conf);
+        URI recoveredEditsUri = recoveredEdits.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path
+        HLog.Writer writer = HLog.createWriter(fs, recoveredEditsUri, conf);
 
         long time = System.nanoTime();
         WALEdit edit = new WALEdit();
@@ -255,7 +257,8 @@ public class TestHRegion extends HBaseTestCase {
       for (long i = minSeqId; i <= maxSeqId; i += 10) {
         Path recoveredEdits = new Path(recoveredEditsDir, String.format("%019d", i));
         fs.create(recoveredEdits);
-        HLog.Writer writer = HLog.createWriter(fs, recoveredEdits, conf);
+        URI recoveredEditsUri = recoveredEdits.toUri(); // BREADCRUMB (Fran): createWriter now gets URI, not path
+        HLog.Writer writer = HLog.createWriter(fs, recoveredEditsUri, conf);
 
         long time = System.nanoTime();
         WALEdit edit = new WALEdit();
