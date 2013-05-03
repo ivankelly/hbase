@@ -71,6 +71,9 @@ import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.StringUtils;
 
+import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
+import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
+
 /**
  * HLog stores all the edits to the HStore.  Its the hbase write-ahead-log
  * implementation.
@@ -129,14 +132,13 @@ public class HLog implements Syncable {
   static final String RECOVERED_LOG_TMPFILE_SUFFIX = ".temp";
   
   private final FileSystem fs;
-  private final Path dir; // FIXME (Fran): Delete me and use dirUri
   private final URI dirUri; // BREADCRUMB (Fran): This mimics dir but as URI
   private final Configuration conf;
   // Listeners that are called on WAL events.
   private List<WALActionsListener> listeners =
     new CopyOnWriteArrayList<WALActionsListener>();
-  private final long optionalFlushInterval;
-  private final long blocksize;
+  private long optionalFlushInterval; // BREADCRUMB (Fran): Remove dir as Path
+  private long blocksize; // BREADCRUMB (Fran): Remove dir as Path
   private final String prefix;
   private final Path oldLogDir;
   private boolean logRollRunning;
@@ -217,7 +219,7 @@ public class HLog implements Syncable {
 
   // If > than this size, roll the log. This is typically 0.95 times the size
   // of the default Hdfs block size.
-  private final long logrollsize;
+  private long logrollsize; // BREADCRUMB (Fran): Remove dir as Path
 
   // This lock prevents starting a log roll during a cache flush.
   // synchronized is insufficient because a cache flush spans two method calls.
@@ -369,7 +371,6 @@ public class HLog implements Syncable {
   throws IOException {
     super();
     this.fs = fs;
-    this.dir = dir;
     this.dirUri = dir.toUri(); // BREADCRUMB (Fran): This mimics dir but as URI
     this.conf = conf;
     if (listeners != null) {
@@ -377,18 +378,22 @@ public class HLog implements Syncable {
         registerWALActionsListener(i);
       }
     }
-    this.blocksize = conf.getLong("hbase.regionserver.hlog.blocksize",
-        getDefaultBlockSize());
-    // Roll at 95% of block size.
-    float multi = conf.getFloat("hbase.regionserver.logroll.multiplier", 0.95f);
-    this.logrollsize = (long)(this.blocksize * multi);
-    this.optionalFlushInterval =
-      conf.getLong("hbase.regionserver.optionallogflushinterval", 1 * 1000);
-    if (failIfLogDirExists && fs.exists(dir)) {
-      throw new IOException("Target HLog directory already exists: " + dir);
-    }
-    if (!fs.mkdirs(dir)) {
-      throw new IOException("Unable to mkdir " + dir);
+    // BREADCRUMB (Fran): Remove dir as Path
+    boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
+    if(!isBkEnabled) {
+      this.blocksize = conf.getLong("hbase.regionserver.hlog.blocksize",
+          getDefaultBlockSize(dir));
+      // Roll at 95% of block size.
+      float multi = conf.getFloat("hbase.regionserver.logroll.multiplier", 0.95f);
+      this.logrollsize = (long)(this.blocksize * multi);
+      this.optionalFlushInterval =
+        conf.getLong("hbase.regionserver.optionallogflushinterval", 1 * 1000);
+      if (failIfLogDirExists && fs.exists(dir)) {
+        throw new IOException("Target HLog directory already exists: " + dir);
+      }
+      if (!fs.mkdirs(dir)) {
+        throw new IOException("Unable to mkdir " + dir);
+      }
     }
     this.oldLogDir = oldLogDir;
     if (!fs.exists(oldLogDir)) {
@@ -428,7 +433,7 @@ public class HLog implements Syncable {
   
   // use reflection to search for getDefaultBlockSize(Path f)
   // if the method doesn't exist, fall back to using getDefaultBlockSize()
-  private long getDefaultBlockSize() throws IOException {
+  private long getDefaultBlockSize(Path dir) throws IOException { // BREADCRUMB (Fran): Modified to pass dirUri as Path
     Method m = null;
     Class<? extends FileSystem> cls = this.fs.getClass();
     try {
@@ -445,7 +450,7 @@ public class HLog implements Syncable {
       return this.fs.getDefaultBlockSize();
     } else {
       try {
-        Object ret = m.invoke(this.fs, this.dir);
+        Object ret = m.invoke(this.fs, dir); // BREADCRUMB (Fran): Modified to pass dirUri as Path
         return ((Long)ret).longValue();
       } catch (Exception e) {
         throw new IOException(e);
@@ -902,7 +907,7 @@ public class HLog implements Syncable {
     if (filenum < 0) {
       throw new RuntimeException("hlog file number can't be < 0");
     }
-    return new Path(dir, prefix + "." + filenum);
+    return new Path(new Path(dirUri), prefix + "." + filenum);
   }
   
   // BREADCRUMB (Fran): This should return a URI so the idea is to deprecate the previous method
@@ -928,18 +933,23 @@ public class HLog implements Syncable {
    */
   public void closeAndDelete() throws IOException {
     close();
-    if (!fs.exists(this.dir)) return;
-    FileStatus[] files = fs.listStatus(this.dir);
-    for(FileStatus file : files) {
-      Path p = getHLogArchivePath(this.oldLogDir, file.getPath());
-      if (!fs.rename(file.getPath(),p)) {
-        throw new IOException("Unable to rename " + file.getPath() + " to " + p);
+    // BREADCRUMB (Fran): Remove dir as Path
+    boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
+    if(!isBkEnabled) {
+      Path dir = new Path(dirUri);
+      if (!fs.exists(dir)) return;
+      FileStatus[] files = fs.listStatus(dir);
+      for(FileStatus file : files) {
+        Path p = getHLogArchivePath(this.oldLogDir, file.getPath());
+        if (!fs.rename(file.getPath(),p)) {
+          throw new IOException("Unable to rename " + file.getPath() + " to " + p);
+        }
       }
-    }
-    LOG.debug("Moved " + files.length + " log files to " +
-      FSUtils.getPath(this.oldLogDir));
-    if (!fs.delete(dir, true)) {
-      LOG.info("Unable to delete " + dir);
+      LOG.debug("Moved " + files.length + " log files to " +
+        FSUtils.getPath(this.oldLogDir));
+      if (!fs.delete(dir, true)) {
+        LOG.info("Unable to delete " + dir);
+      }
     }
   }
 
@@ -969,7 +979,7 @@ public class HLog implements Syncable {
       synchronized (updateLock) {
         this.closed = true;
         if (LOG.isDebugEnabled()) {
-          LOG.debug("closing hlog writer in " + this.dir.toString());
+          LOG.debug("closing hlog writer in " + this.dirUri.toString()); // BREADCRUMB (Fran): Remove dir as Path
         }
         if (this.writer != null) {
           this.writer.close();
@@ -1586,7 +1596,7 @@ public class HLog implements Syncable {
    * @return dir
    */
   protected Path getDir() {
-    return dir;
+    return new Path(dirUri); // BREADCRUMB (Fran): Modified to pass dirUri as Path
   }
   
   public static boolean validateHLogFilename(String filename) {
