@@ -140,7 +140,7 @@ public class HLog implements Syncable {
   private long optionalFlushInterval; // BREADCRUMB (Fran): Remove dir as Path
   private long blocksize; // BREADCRUMB (Fran): Remove dir as Path
   private final String prefix;
-  private final Path oldLogDir;
+  private final URI oldLogDirUri; // BREADCRUMB (Fran): Remove oldLogDir as Path
   private boolean logRollRunning;
 
   private static Class<? extends Writer> logWriterClass;
@@ -372,6 +372,7 @@ public class HLog implements Syncable {
     super();
     this.fs = fs;
     this.dirUri = dir.toUri(); // BREADCRUMB (Fran): This mimics dir but as URI
+    this.oldLogDirUri = oldLogDir.toUri(); // BREADCRUMB (Fran): Remove oldLogDir as Path
     this.conf = conf;
     if (listeners != null) {
       for (WALActionsListener i: listeners) {
@@ -394,11 +395,10 @@ public class HLog implements Syncable {
       if (!fs.mkdirs(dir)) {
         throw new IOException("Unable to mkdir " + dir);
       }
-    }
-    this.oldLogDir = oldLogDir;
-    if (!fs.exists(oldLogDir)) {
-      if (!fs.mkdirs(this.oldLogDir)) {
-        throw new IOException("Unable to mkdir " + this.oldLogDir);
+      if (!fs.exists(oldLogDir)) { // BREADCRUMB (Fran): Remove oldLogDir as Path
+        if (!fs.mkdirs(oldLogDir)) {
+          throw new IOException("Unable to mkdir " + oldLogDir);
+        }
       }
     }
     this.maxLogs = conf.getInt("hbase.regionserver.maxlogs", 32);
@@ -867,7 +867,7 @@ public class HLog implements Syncable {
   }
 
   private void archiveLogFile(final Path p, final Long seqno) throws IOException {
-    Path newPath = getHLogArchivePath(this.oldLogDir, p);
+    Path newPath = getHLogArchivePath(new Path(oldLogDirUri), p); // BREADCRUMB (Fran): Remove oldLogDir as Path
     LOG.info("moving old hlog file " + FSUtils.getPath(p) +
       " whose highest sequenceid is " + seqno + " to " +
       FSUtils.getPath(newPath));
@@ -937,16 +937,17 @@ public class HLog implements Syncable {
     boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
     if(!isBkEnabled) {
       Path dir = new Path(dirUri);
+      Path oldLogDir = new Path(oldLogDirUri); // BREADCRUMB (Fran): Remove oldLogDir as Path
       if (!fs.exists(dir)) return;
       FileStatus[] files = fs.listStatus(dir);
       for(FileStatus file : files) {
-        Path p = getHLogArchivePath(this.oldLogDir, file.getPath());
+        Path p = getHLogArchivePath(oldLogDir, file.getPath());
         if (!fs.rename(file.getPath(),p)) {
           throw new IOException("Unable to rename " + file.getPath() + " to " + p);
         }
       }
       LOG.debug("Moved " + files.length + " log files to " +
-        FSUtils.getPath(this.oldLogDir));
+        FSUtils.getPath(oldLogDir));
       if (!fs.delete(dir, true)) {
         LOG.info("Unable to delete " + dir);
       }
