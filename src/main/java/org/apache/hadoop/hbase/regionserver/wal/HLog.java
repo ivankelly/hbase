@@ -184,8 +184,8 @@ public class HLog implements Syncable {
   /*
    * Map of all log files but the current one.
    */
-  final SortedMap<Long, Path> outputfiles = // FIXME (Fran): The tree map should be <Long, URI>
-    Collections.synchronizedSortedMap(new TreeMap<Long, Path>());
+  final SortedMap<Long, URI> outputfiles = // BREADCRUMB (Fran): outputfiles tree map is now <Long, URI>
+    Collections.synchronizedSortedMap(new TreeMap<Long, URI>());
 
   /*
    * Map of encoded region names to their most recent sequence/edit id in their
@@ -645,8 +645,8 @@ public class HLog implements Syncable {
           // If so, then no new writes have come in since all regions were
           // flushed (and removed from the lastSeqWritten map). Means can
           // remove all but currently open log file.
-          for (Map.Entry<Long, Path> e : this.outputfiles.entrySet()) {
-            archiveLogFile(e.getValue(), e.getKey());
+          for (Map.Entry<Long, URI> e : this.outputfiles.entrySet()) { // BREADCRUMB (Fran): outputfiles tree map is now <Long, URI>
+            archiveLogFile(new Path(e.getValue()), e.getKey()); // FIXME (Fran): archiveLogFile() should take a URI as a param
           }
           this.outputfiles.clear();
         } else {
@@ -755,7 +755,7 @@ public class HLog implements Syncable {
           " from region " + Bytes.toStringBinary(oldestRegion));
       }
       for (Long seq : sequenceNumbers) {
-        archiveLogFile(this.outputfiles.remove(seq), seq);
+        archiveLogFile(new Path(this.outputfiles.remove(seq)), seq); // FIXME (Fran): archiveLogFile() should take a URI as a param
       }
     }
 
@@ -862,8 +862,7 @@ public class HLog implements Syncable {
       }
       if (currentfilenum >= 0) {
         URI oldFileUri = computeFilename(currentfilenum); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
-        oldFile = new Path(oldFileUri);
-        this.outputfiles.put(Long.valueOf(this.logSeqNum.get()), oldFile);
+        this.outputfiles.put(Long.valueOf(this.logSeqNum.get()), oldFileUri); // BREADCRUMB (Fran): outputfiles tree map is now <Long, URI>
       }
     }
     return oldFile;
