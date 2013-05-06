@@ -428,8 +428,10 @@ public class HLog implements Syncable {
     // rollWriter sets this.hdfs_out if it can.
     rollWriter();
 
-    // handle the reflection necessary to call getNumCurrentReplicas()
-    this.getNumCurrentReplicas = getGetNumCurrentReplicas(this.hdfs_out);
+    if(!isBkWalEnabled) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+      // handle the reflection necessary to call getNumCurrentReplicas()
+      this.getNumCurrentReplicas = getGetNumCurrentReplicas(this.hdfs_out);
+    } // Do nothing on the else part for BK
 
     logSyncerThread = new LogSyncer(this.optionalFlushInterval);
     Threads.setDaemonThreadRunning(logSyncerThread.getThread(),
@@ -610,10 +612,10 @@ public class HLog implements Syncable {
       // SFLW, it'll have done the necessary reflection to get at the
       // protected field name.
       FSDataOutputStream nextHdfsOut = null;
-      if (nextWriter instanceof SequenceFileLogWriter) {
-        nextHdfsOut = ((SequenceFileLogWriter)nextWriter).getWriterFSDataOutputStream();
-      }
       if (!isBkWalEnabled) { // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+        if (nextWriter instanceof SequenceFileLogWriter) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+          nextHdfsOut = ((SequenceFileLogWriter)nextWriter).getWriterFSDataOutputStream();
+        }      
         // Tell our listeners that a new log was created
         Path newPath = new Path(newUri);
         if (!this.listeners.isEmpty()) {
@@ -632,16 +634,18 @@ public class HLog implements Syncable {
         // Clean up current writer.
         URI oldFileUri = cleanupCurrentWriter(currentFilenum); // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
         this.writer = nextWriter;
-        this.hdfs_out = nextHdfsOut;
-        if(isBkWalEnabled) { // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
-            Path oldFile = new Path(oldFileUri);
-            Path newPath = new Path(newUri);
-            LOG.info((oldFile != null?
-        	    "Roll " + FSUtils.getPath(oldFile) + ", entries=" +
-        	    this.numEntries.get() +
-        	    ", filesize=" +
-        	    this.fs.getFileStatus(oldFile).getLen() + ". ": "") +
-        	    " for " + FSUtils.getPath(newPath));
+        if(!isBkWalEnabled) { // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
+            this.hdfs_out = nextHdfsOut; // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+            if ((oldFileUri != null) && (newUri != null)) {
+              Path oldFile = new Path(oldFileUri);
+              Path newPath = new Path(newUri);
+              LOG.info((oldFile != null?
+        	      "Roll " + FSUtils.getPath(oldFile) + ", entries=" +
+        	      this.numEntries.get() +
+        	      ", filesize=" +
+        	      this.fs.getFileStatus(oldFile).getLen() + ". ": "") +
+        	      " for " + FSUtils.getPath(newPath));
+            }
         } else { // FIXME (Fran): Create a log message for BK WAL
             
         }
@@ -1252,13 +1256,17 @@ public class HLog implements Syncable {
    */
   int getLogReplication()
   throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-    if (this.getNumCurrentReplicas != null && this.hdfs_out != null) {
-      Object repl = this.getNumCurrentReplicas.invoke(getOutputStream(), NO_ARGS);
-      if (repl instanceof Integer) {
-        return ((Integer)repl).intValue();
+    if (!isBkWalEnabled) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+      if (this.getNumCurrentReplicas != null && this.hdfs_out != null) {
+        Object repl = this.getNumCurrentReplicas.invoke(getOutputStream(), NO_ARGS);
+        if (repl instanceof Integer) {
+          return ((Integer)repl).intValue();
+        }
       }
+      return 0;
+    } else { // FIXME (Fran): Return the right number of replicas for BK
+      return 0;
     }
-    return 0;
   }
 
   boolean canGetCurReplicas() {
