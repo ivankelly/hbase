@@ -613,13 +613,15 @@ public class HLog implements Syncable {
       if (nextWriter instanceof SequenceFileLogWriter) {
         nextHdfsOut = ((SequenceFileLogWriter)nextWriter).getWriterFSDataOutputStream();
       }
-      // Tell our listeners that a new log was created
-      Path newPath = new Path(newUri); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
-      if (!this.listeners.isEmpty()) {
-        for (WALActionsListener i : this.listeners) {
-          i.logRolled(newPath);
+      if (!isBkWalEnabled) { // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+        // Tell our listeners that a new log was created
+        Path newPath = new Path(newUri);
+        if (!this.listeners.isEmpty()) {
+          for (WALActionsListener i : this.listeners) {
+            i.logRolled(newPath);
+          }
         }
-      }
+      } // Do nothing on the else part for BK
 
       synchronized (updateLock) {
         if (closed) {
@@ -633,6 +635,7 @@ public class HLog implements Syncable {
         this.hdfs_out = nextHdfsOut;
         if(isBkWalEnabled) { // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
             Path oldFile = new Path(oldFileUri);
+            Path newPath = new Path(newUri);
             LOG.info((oldFile != null?
         	    "Roll " + FSUtils.getPath(oldFile) + ", entries=" +
         	    this.numEntries.get() +
