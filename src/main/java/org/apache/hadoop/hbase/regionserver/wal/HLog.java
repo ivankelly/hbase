@@ -628,17 +628,21 @@ public class HLog implements Syncable {
           return regionsToFlush;
         }
         // Clean up current writer.
-        Path oldFile = cleanupCurrentWriter(currentFilenum);
+        URI oldFileUri = cleanupCurrentWriter(currentFilenum); // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
         this.writer = nextWriter;
         this.hdfs_out = nextHdfsOut;
-
-        LOG.info((oldFile != null?
-            "Roll " + FSUtils.getPath(oldFile) + ", entries=" +
-            this.numEntries.get() +
-            ", filesize=" +
-            this.fs.getFileStatus(oldFile).getLen() + ". ": "") +
-          " for " + FSUtils.getPath(newPath));
-        this.numEntries.set(0);
+        if(isBkWalEnabled) { // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
+            Path oldFile = new Path(oldFileUri);
+            LOG.info((oldFile != null?
+        	    "Roll " + FSUtils.getPath(oldFile) + ", entries=" +
+        	    this.numEntries.get() +
+        	    ", filesize=" +
+        	    this.fs.getFileStatus(oldFile).getLen() + ". ": "") +
+        	    " for " + FSUtils.getPath(newPath));
+        } else { // FIXME (Fran): Create a log message for BK WAL
+            
+        }
+        this.numEntries.set(0);        
       }
       // Can we delete any of the old log files?
       if (this.outputfiles.size() > 0) {
@@ -836,8 +840,8 @@ public class HLog implements Syncable {
    * @return Path to current writer or null if none.
    * @throws IOException
    */
-  Path cleanupCurrentWriter(final long currentfilenum) throws IOException {
-    Path oldFile = null;
+  URI cleanupCurrentWriter(final long currentfilenum) throws IOException {
+    URI oldFileUri = null; // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
     if (this.writer != null) {
       // Close the current writer, get a new one.
       try {
@@ -863,11 +867,11 @@ public class HLog implements Syncable {
         }
       }
       if (currentfilenum >= 0) {
-        URI oldFileUri = computeFilename(currentfilenum); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+        oldFileUri = computeFilename(currentfilenum); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
         this.outputfiles.put(Long.valueOf(this.logSeqNum.get()), oldFileUri); // BREADCRUMB (Fran): outputfiles tree map is now <Long, URI>
       }
     }
-    return oldFile;
+    return oldFileUri;
   }
 
   private void archiveLogFile(final URI uri, final Long seqno) throws IOException { // BREADCRUMB (Fran): Now archiveLogFile gets a URI
