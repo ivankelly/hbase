@@ -934,6 +934,8 @@ public class HLog implements Syncable {
       if (!fs.delete(dir, true)) {
         LOG.info("Unable to delete " + dir);
       }
+    } else { // BK specific stuff for closing FIXME (Fran): Fill me
+	
     }
   }
 
