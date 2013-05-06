@@ -646,7 +646,7 @@ public class HLog implements Syncable {
           // flushed (and removed from the lastSeqWritten map). Means can
           // remove all but currently open log file.
           for (Map.Entry<Long, URI> e : this.outputfiles.entrySet()) { // BREADCRUMB (Fran): outputfiles tree map is now <Long, URI>
-            archiveLogFile(new Path(e.getValue()), e.getKey()); // FIXME (Fran): archiveLogFile() should take a URI as a param
+            archiveLogFile(e.getValue(), e.getKey()); // BREADCRUMB (Fran): Now archiveLogFile gets a URI
           }
           this.outputfiles.clear();
         } else {
@@ -755,7 +755,7 @@ public class HLog implements Syncable {
           " from region " + Bytes.toStringBinary(oldestRegion));
       }
       for (Long seq : sequenceNumbers) {
-        archiveLogFile(new Path(this.outputfiles.remove(seq)), seq); // FIXME (Fran): archiveLogFile() should take a URI as a param
+        archiveLogFile(this.outputfiles.remove(seq), seq); // BREADCRUMB (Fran): Now archiveLogFile gets a URI
       }
     }
 
@@ -868,13 +868,20 @@ public class HLog implements Syncable {
     return oldFile;
   }
 
-  private void archiveLogFile(final Path p, final Long seqno) throws IOException {
-    Path newPath = getHLogArchivePath(new Path(oldLogDirUri), p); // BREADCRUMB (Fran): Remove oldLogDir as Path
-    LOG.info("moving old hlog file " + FSUtils.getPath(p) +
-      " whose highest sequenceid is " + seqno + " to " +
-      FSUtils.getPath(newPath));
-    if (!this.fs.rename(p, newPath)) {
-      throw new IOException("Unable to rename " + p + " to " + newPath);
+  private void archiveLogFile(final URI uri, final Long seqno) throws IOException { // BREADCRUMB (Fran): Now archiveLogFile gets a URI
+    boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
+    if (!isBkEnabled) {
+      Path oldLogDir = new Path(oldLogDirUri); // BREADCRUMB (Fran): Remove oldLogDir as Path
+      Path p = new Path(uri);
+      Path newPath = getHLogArchivePath(oldLogDir, p);
+      LOG.info("moving old hlog file " + FSUtils.getPath(p) +
+        " whose highest sequenceid is " + seqno + " to " +
+        FSUtils.getPath(newPath));
+      if (!this.fs.rename(p, newPath)) {
+        throw new IOException("Unable to rename " + p + " to " + newPath);
+      }
+    } else { // Perform BK log file archiving FIXME (Fran): Implement log archiving in BK
+	
     }
   }
 
