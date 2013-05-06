@@ -184,7 +184,7 @@ public class HLog implements Syncable {
   /*
    * Map of all log files but the current one.
    */
-  final SortedMap<Long, Path> outputfiles =
+  final SortedMap<Long, Path> outputfiles = // FIXME (Fran): The tree map should be <Long, URI>
     Collections.synchronizedSortedMap(new TreeMap<Long, Path>());
 
   /*
@@ -598,11 +598,8 @@ public class HLog implements Syncable {
       // as less as possible the incoming writes
       long currentFilenum = this.filenum;
       this.filenum = System.currentTimeMillis();
-      Path newPath = computeFilename(); // FIXME (Fran): computeFilename() now should return a URI instead of Path
-      URI newUri = computeFilenameAsUri(); // FIXME (Fran): remove me whem computeFilename returns a URI
+      URI newUri = computeFilename(); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
       HLog.Writer nextWriter = this.createWriterInstance(fs, newUri, conf);
-      LOG.info("NEW URI " + newUri.toString());
-      LOG.info("NEW Path " + newPath.toString());
       // Can we get at the dfsclient outputstream?  If an instance of
       // SFLW, it'll have done the necessary reflection to get at the
       // protected field name.
@@ -611,6 +608,7 @@ public class HLog implements Syncable {
         nextHdfsOut = ((SequenceFileLogWriter)nextWriter).getWriterFSDataOutputStream();
       }
       // Tell our listeners that a new log was created
+      Path newPath = new Path(newUri); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
       if (!this.listeners.isEmpty()) {
         for (WALActionsListener i : this.listeners) {
           i.logRolled(newPath);
@@ -859,7 +857,8 @@ public class HLog implements Syncable {
         }
       }
       if (currentfilenum >= 0) {
-        oldFile = computeFilename(currentfilenum);
+        URI oldFileUri = computeFilename(currentfilenum); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+        oldFile = new Path(oldFileUri);
         this.outputfiles.put(Long.valueOf(this.logSeqNum.get()), oldFile);
       }
     }
@@ -876,56 +875,30 @@ public class HLog implements Syncable {
     }
   }
 
-  //FIXME (Fran): Put the code on the method below on me!
+  //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
   /**
    * This is a convenience method that computes a new filename with a given
    * using the current HLog file-number
-   * @return Path
+   * @return URI
    */
-  protected Path computeFilename() {
+  protected URI computeFilename() {
     return computeFilename(this.filenum);
   }
 
-  // BREADCRUMB (Fran): This should return a URI so the idea is to deprecate the previous method
-  /**
-   * This is a convenience method that computes a new filename with a given
-   * using the current HLog file-number
-   * @return URI
-   */
-  protected URI computeFilenameAsUri() {
-    return computeFilenameAsUri(this.filenum);
-  }
-
-  // FIXME (Fran): Put the code on the method below on me!
-  /**
-   * This is a convenience method that computes a new filename with a given
-   * file-number.
-   * @param filenum to use
-   * @return Path
-   */
-  protected Path computeFilename(long filenum) {
-    if (filenum < 0) {
-      throw new RuntimeException("hlog file number can't be < 0");
-    }
-    return new Path(new Path(dirUri), prefix + "." + filenum);
-  }
-  
-  // BREADCRUMB (Fran): This should return a URI so the idea is to deprecate the previous method
+  //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
   /**
    * This is a convenience method that computes a new filename with a given
    * file-number.
    * @param filenum to use
    * @return URI
    */
-  protected URI computeFilenameAsUri(long filenum) {
+  protected URI computeFilename(long filenum) {
     if (filenum < 0) {
       throw new RuntimeException("hlog file number can't be < 0");
     }
-//    String tail = "/" + prefix + "." + filenum; // Doesn't work for all the cases (TestLogRolling fails)
-//    return URI.create(dirUri.toASCIIString() + tail); // Doesn't work for all the cases (TestLogRolling fails)
     return (new Path(new Path(dirUri), prefix + "." + filenum)).toUri(); // BREADCRUMB (Fran): Take a look at me
   }
-
+  
   /**
    * Shut down the log and delete the log directory
    *

@@ -426,7 +426,7 @@ public class TestLogRolling  {
     server = TEST_UTIL.getRSForFirstRegionInTable(Bytes.toBytes(tableName));
     this.log = server.getWAL();
     final List<Path> paths = new ArrayList<Path>();
-    paths.add(log.computeFilename());
+    paths.add(new Path(log.computeFilename())); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
     log.registerWALActionsListener(new WALActionsListener() {
       @Override
       public void logRolled(Path newFile) {

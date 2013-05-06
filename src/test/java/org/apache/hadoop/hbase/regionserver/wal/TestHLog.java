@@ -222,7 +222,7 @@ public class TestHLog  {
     // gives you EOFE.
     wal.sync();
     // Open a Reader.
-    Path walPath = wal.computeFilename();
+    Path walPath = new Path(wal.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
     HLog.Reader reader = HLog.getReader(fs, walPath, conf);
     int count = 0;
     HLog.Entry entry = new HLog.Entry();
@@ -355,7 +355,7 @@ public class TestHLog  {
     // Now call sync to send the data to HDFS datanodes
     wal.sync();
      int namenodePort = cluster.getNameNodePort();
-    final Path walPath = wal.computeFilename();
+    final Path walPath = new Path(wal.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
     
 
     // Stop the cluster.  (ensure restart since we're sharing MiniDFSCluster)
@@ -478,7 +478,7 @@ public class TestHLog  {
       log.completeCacheFlush(info.getEncodedNameAsBytes(), tableName, logSeqId,
           info.isMetaRegion());
       log.close();
-      Path filename = log.computeFilename();
+      Path filename = new Path(log.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
       log = null;
       // Now open a reader on the log and assert append worked.
       reader = HLog.getReader(fs, filename, conf);
@@ -548,7 +548,7 @@ public class TestHLog  {
       long logSeqId = log.startCacheFlush(hri.getEncodedNameAsBytes());
       log.completeCacheFlush(hri.getEncodedNameAsBytes(), tableName, logSeqId, false);
       log.close();
-      Path filename = log.computeFilename();
+      Path filename = new Path(log.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
       log = null;
       // Now open a reader on the log and assert append worked.
       reader = HLog.getReader(fs, filename, conf);
@@ -680,22 +680,6 @@ public class TestHLog  {
     WALCoprocessorHost host = log.getCoprocessorHost();
     Coprocessor c = host.findCoprocessor(SampleRegionWALObserver.class.getName());
     assertNotNull(c);
-  }
-  
-  /**
-   * BREADCRUMB (Fran): Test
-   */
-  @Test
-  public void testComputeFilenameReturnsTheSameStringAsUriAndAsPath() throws IOException {
-
-    final byte [] tableName = Bytes.toBytes(getName());
-    final byte [] rowName = tableName;
-    Path logdir = new Path(hbaseDir, HConstants.HREGION_LOGDIR_NAME);
-    HLog log = new HLog(fs, logdir, oldLogDir, conf);
-    assertTrue(log.computeFilename().toString().equals(log.computeFilenameAsUri().toString()));
-    if (log != null) {
-      log.closeAndDelete();
-    }
   }
 
   private void addEdits(HLog log, HRegionInfo hri, byte [] tableName,
