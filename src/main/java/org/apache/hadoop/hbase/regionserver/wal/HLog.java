@@ -137,8 +137,8 @@ public class HLog implements Syncable {
   // Listeners that are called on WAL events.
   private List<WALActionsListener> listeners =
     new CopyOnWriteArrayList<WALActionsListener>();
-  private long optionalFlushInterval; // BREADCRUMB (Fran): Remove dir as Path
-  private long blocksize; // BREADCRUMB (Fran): Remove dir as Path
+  private final long optionalFlushInterval; // BREADCRUMB (Fran): Remove dir as Path, FIXME (Fran): HDFS specific, they should never really be used outside of a if (!bk) block. Initialization should be fixed for BK in constructor
+  private final long blocksize; // BREADCRUMB (Fran): Remove dir as Path, FIXME (Fran): HDFS specific, they should never really be used outside of a if (!bk) block. Initialization should be fixed for BK in constructor
   private final String prefix;
   private final URI oldLogDirUri; // BREADCRUMB (Fran): Remove oldLogDir as Path
   private boolean logRollRunning;
@@ -219,7 +219,7 @@ public class HLog implements Syncable {
 
   // If > than this size, roll the log. This is typically 0.95 times the size
   // of the default Hdfs block size.
-  private long logrollsize; // BREADCRUMB (Fran): Remove dir as Path
+  private final long logrollsize; // BREADCRUMB (Fran): Remove dir as Path, FIXME (Fran): HDFS specific, they should never really be used outside of a if (!bk) block. Initialization should be fixed for BK in constructor
 
   // This lock prevents starting a log roll during a cache flush.
   // synchronized is insufficient because a cache flush spans two method calls.
@@ -400,6 +400,10 @@ public class HLog implements Syncable {
           throw new IOException("Unable to mkdir " + oldLogDir);
         }
       }
+    } else { // BK specific stuff initialization FIXME (Fran): Initialize me
+	this.blocksize = 0L;
+	this.logrollsize = 0L;
+	this.optionalFlushInterval = 0L;
     }
     this.maxLogs = conf.getInt("hbase.regionserver.maxlogs", 32);
     this.minTolerableReplication = conf.getInt(
@@ -896,7 +900,7 @@ public class HLog implements Syncable {
     if (filenum < 0) {
       throw new RuntimeException("hlog file number can't be < 0");
     }
-    return (new Path(new Path(dirUri), prefix + "." + filenum)).toUri(); // BREADCRUMB (Fran): Take a look at me
+    return (new Path(new Path(dirUri), prefix + "." + filenum)).toUri(); // FIXME (Fran): Don't use Path to create the URI
   }
   
   /**
