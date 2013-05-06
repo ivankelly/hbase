@@ -305,6 +305,8 @@ public class HLog implements Syncable {
     return ret;
   }
 
+  private boolean isBkWalEnabled; // BREADCRUMB (Fran): Switch to select between Wal implementations
+  
   /**
    * Constructor.
    *
@@ -380,8 +382,8 @@ public class HLog implements Syncable {
       }
     }
     // BREADCRUMB (Fran): Remove dir as Path
-    boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
-    if(!isBkEnabled) {
+    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
+    if(!isBkWalEnabled) {
       this.blocksize = conf.getLong("hbase.regionserver.hlog.blocksize",
           getDefaultBlockSize(dir));
       // Roll at 95% of block size.
@@ -869,8 +871,7 @@ public class HLog implements Syncable {
   }
 
   private void archiveLogFile(final URI uri, final Long seqno) throws IOException { // BREADCRUMB (Fran): Now archiveLogFile gets a URI
-    boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
-    if (!isBkEnabled) {
+    if (!isBkWalEnabled) {
       Path oldLogDir = new Path(oldLogDirUri); // BREADCRUMB (Fran): Remove oldLogDir as Path
       Path p = new Path(uri);
       Path newPath = getHLogArchivePath(oldLogDir, p);
@@ -917,8 +918,7 @@ public class HLog implements Syncable {
   public void closeAndDelete() throws IOException {
     close();
     // BREADCRUMB (Fran): Remove dir as Path
-    boolean isBkEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
-    if(!isBkEnabled) {
+    if(!isBkWalEnabled) {
       Path dir = new Path(dirUri);
       Path oldLogDir = new Path(oldLogDirUri); // BREADCRUMB (Fran): Remove oldLogDir as Path
       if (!fs.exists(dir)) return;
