@@ -2303,7 +2303,7 @@ public class HRegion implements HeapSize { // , Writable{
    * @throws UnsupportedEncodingException
    * @throws IOException
    */
-  protected long replayRecoveredEditsIfAny(final Path regiondir,
+  protected long replayRecoveredEditsIfAny(final Path regiondir, // FIXME (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
       final long minSeqId, final CancelableProgressable reporter,
       final MonitoredTask status)
       throws UnsupportedEncodingException, IOException {
@@ -2337,7 +2337,7 @@ public class HRegion implements HeapSize { // , Writable{
       }
 
       try {
-        seqid = replayRecoveredEdits(edits, seqid, reporter);
+        seqid = replayRecoveredEdits(edits.toUri(), seqid, reporter); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits()
       } catch (IOException e) {
         boolean skipErrors = conf.getBoolean("hbase.skip.errors", false);
         if (skipErrors) {
@@ -2380,7 +2380,7 @@ public class HRegion implements HeapSize { // , Writable{
    * recovered edits log or <code>minSeqId</code> if nothing added from editlogs.
    * @throws IOException
    */
-  private long replayRecoveredEdits(final Path edits, // FIXME (Fran): Use URI in HRegion#replayRecoveredEdits()
+  private long replayRecoveredEdits(final URI edits, // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits()
       final long minSeqId, final CancelableProgressable reporter)
     throws IOException {
     String msg = "Replaying edits from " + edits + "; minSequenceid=" +
@@ -2391,8 +2391,8 @@ public class HRegion implements HeapSize { // , Writable{
     status.setStatus("Opening logs");
     HLog.Reader reader = null;
     try {
-      URI editsUri = edits.toUri();
-      reader = HLog.getReader(this.fs, editsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
+//      URI editsUri = edits.toUri(); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits()
+      reader = HLog.getReader(this.fs, edits, conf); // BREADCRUMB (Fran): Use URI in getReader()
       long currentEditSeqId = minSeqId;
       long firstSeqIdInLog = -1;
       long skippedEdits = 0;
@@ -2491,7 +2491,7 @@ public class HRegion implements HeapSize { // , Writable{
           }
         }
       } catch (EOFException eof) {
-        Path p = HLog.moveAsideBadEditsFile(fs, edits);
+        Path p = HLog.moveAsideBadEditsFile(fs, new Path(edits)); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() FIXME (Fran): Do we need to do something for BK ???
         msg = "Encountered EOF. Most likely due to Master failure during " +
             "log spliting, so we have this data in another edit.  " +
             "Continuing, but renaming " + edits + " as " + p;
@@ -2501,7 +2501,7 @@ public class HRegion implements HeapSize { // , Writable{
         // If the IOE resulted from bad file format,
         // then this problem is idempotent and retrying won't help
         if (ioe.getCause() instanceof ParseException) {
-          Path p = HLog.moveAsideBadEditsFile(fs, edits);
+          Path p = HLog.moveAsideBadEditsFile(fs, new Path(edits)); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() FIXME (Fran): Do we need to do something for BK ???
           msg = "File corruption encountered!  " +
               "Continuing, but renaming " + edits + " as " + p;
           LOG.warn(msg, ioe);
