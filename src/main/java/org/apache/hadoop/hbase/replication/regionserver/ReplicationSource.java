@@ -23,6 +23,7 @@ import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -491,7 +492,8 @@ public class ReplicationSource extends Thread
           " at " + this.position);
       try {
        this.reader = null;
-       this.reader = HLog.getReader(this.fs, this.currentPath, this.conf);
+       URI currentPathAsUri = this.currentPath.toUri(); // BREADCRUMB (Fran): Use URI in getReader() FIXME (Fran): Use URI in ReplicationSource ???
+       this.reader = HLog.getReader(this.fs, currentPathAsUri, this.conf); // BREADCRUMB (Fran): Use URI in getReader()
       } catch (FileNotFoundException fnfe) {
         if (this.queueRecovered) {
           // We didn't find the log in the archive directory, look if it still

@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -495,7 +496,8 @@ public class TestLogRolling  {
       LOG.debug("Reading HLog "+FSUtils.getPath(p));
       HLog.Reader reader = null;
       try {
-        reader = HLog.getReader(fs, p, TEST_UTIL.getConfiguration());
+        URI pUri = p.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+        reader = HLog.getReader(fs, pUri, TEST_UTIL.getConfiguration()); // BREADCRUMB (Fran): Use URI in getReader()
         HLog.Entry entry;
         while ((entry = reader.next()) != null) {
           LOG.debug("#"+entry.getKey().getLogSeqNum()+": "+entry.getEdit().getKeyValues());

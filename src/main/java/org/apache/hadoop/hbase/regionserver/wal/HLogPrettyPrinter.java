@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.regionserver.wal;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -223,7 +224,7 @@ public class HLogPrettyPrinter {
    *           may be unable to access the configured filesystem or requested
    *           file.
    */
-  public void processFile(final Configuration conf, final Path p)
+  public void processFile(final Configuration conf, final Path p) // FIXME (Fran): Use URI in HLogPrettyPrinter#processFile() ???
       throws IOException {
     FileSystem fs = FileSystem.get(conf);
     if (!fs.exists(p)) {
@@ -236,7 +237,8 @@ public class HLogPrettyPrinter {
       out.print("[");
       firstTxn = true;
     }
-    Reader log = HLog.getReader(fs, p, conf);
+    URI pUri = p.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    Reader log = HLog.getReader(fs, pUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     try {
       HLog.Entry entry;
       while ((entry = log.next()) != null) {

@@ -692,13 +692,13 @@ public class HLog implements Syncable {
   /**
    * Get a reader for the WAL.
    * @param fs
-   * @param path
+   * @param uri
    * @param conf
    * @return A WAL reader.  Close when done with it.
    * @throws IOException
    */
-  public static Reader getReader(final FileSystem fs, // FIXME (Fran): Use URI in getReader()
-    final Path path, Configuration conf)
+  public static Reader getReader(final FileSystem fs, // BREADCRUMB (Fran): Use URI in getReader()
+    final URI uri, Configuration conf)
   throws IOException {
     try {
 
@@ -710,8 +710,7 @@ public class HLog implements Syncable {
 
 
       HLog.Reader reader = logReaderClass.newInstance();
-      URI pathUri = path.toUri(); // BREADCRUMB (Fran): Use URI in Reader IF
-      reader.init(fs, pathUri, conf); // BREADCRUMB (Fran): Use URI in Reader IF
+      reader.init(fs, uri, conf); // BREADCRUMB (Fran): Use URI in getReader()
       return reader;
     } catch (IOException e) {
       throw e;

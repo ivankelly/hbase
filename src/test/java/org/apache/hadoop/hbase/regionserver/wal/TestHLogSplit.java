@@ -453,7 +453,8 @@ public class TestHLogSplit {
     Path splitLog = getLogForRegion(hbaseDir, TABLE_NAME, REGION);
 
     int actualCount = 0;
-    HLog.Reader in = HLog.getReader(fs, splitLog, conf);
+    URI splitLogUri = splitLog.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    HLog.Reader in = HLog.getReader(fs, splitLogUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     HLog.Entry entry;
     while ((entry = in.next()) != null) ++actualCount;
     assertEquals(entryCount-1, actualCount);
@@ -1276,7 +1277,8 @@ public class TestHLogSplit {
   @SuppressWarnings("unused")
   private void dumpHLog(Path log, FileSystem fs, Configuration conf) throws IOException {
     HLog.Entry entry;
-    HLog.Reader in = HLog.getReader(fs, log, conf);
+    URI logUri = log.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    HLog.Reader in = HLog.getReader(fs, logUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     while ((entry = in.next()) != null) {
       System.out.println(entry);
     }
@@ -1284,7 +1286,8 @@ public class TestHLogSplit {
 
   private int countHLog(Path log, FileSystem fs, Configuration conf) throws IOException {
     int count = 0;
-    HLog.Reader in = HLog.getReader(fs, log, conf);
+    URI logUri = log.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    HLog.Reader in = HLog.getReader(fs, logUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     while (in.next() != null) {
       count++;
     }
@@ -1362,8 +1365,10 @@ public class TestHLogSplit {
 
   private boolean logsAreEqual(Path p1, Path p2) throws IOException {
     HLog.Reader in1, in2;
-    in1 = HLog.getReader(fs, p1, conf);
-    in2 = HLog.getReader(fs, p2, conf);
+    URI p1Uri = p1.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    URI p2Uri = p2.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    in1 = HLog.getReader(fs, p1Uri, conf); // BREADCRUMB (Fran): Use URI in getReader()
+    in2 = HLog.getReader(fs, p2Uri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     HLog.Entry entry1;
     HLog.Entry entry2;
     while ((entry1 = in1.next()) != null) {

@@ -95,7 +95,7 @@ public class TestReplicationSource {
     }
     writer.close();
 
-    HLog.Reader reader = HLog.getReader(FS, logPath, conf);
+    HLog.Reader reader = HLog.getReader(FS, logPathUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     HLog.Entry entry = reader.next();
     assertNotNull(entry);
 

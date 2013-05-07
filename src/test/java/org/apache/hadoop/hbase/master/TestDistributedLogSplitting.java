@@ -25,6 +25,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
@@ -405,7 +406,8 @@ public class TestDistributedLogSplitting {
   private int countHLog(Path log, FileSystem fs, Configuration conf)
   throws IOException {
     int count = 0;
-    HLog.Reader in = HLog.getReader(fs, log, conf);
+    URI logUri = log.toUri();
+    HLog.Reader in = HLog.getReader(fs, logUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     while (in.next() != null) {
       count++;
     }

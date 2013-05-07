@@ -25,6 +25,7 @@ import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,8 +223,9 @@ public class TestHLog  {
     // gives you EOFE.
     wal.sync();
     // Open a Reader.
-    Path walPath = new Path(wal.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
-    HLog.Reader reader = HLog.getReader(fs, walPath, conf);
+    // Path walPath = new Path(wal.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+    URI walPathAsUri = wal.computeFilename(); // BREADCRUMB (Fran): Use URI in getReader()
+    HLog.Reader reader = HLog.getReader(fs, walPathAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     int count = 0;
     HLog.Entry entry = new HLog.Entry();
     while ((entry = reader.next(entry)) != null) count++;
@@ -236,14 +238,14 @@ public class TestHLog  {
       kvs.add(new KeyValue(Bytes.toBytes(i), bytes, bytes));
       wal.append(info, bytes, kvs, System.currentTimeMillis(), htd);
     }
-    reader = HLog.getReader(fs, walPath, conf);
+    reader = HLog.getReader(fs, walPathAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     count = 0;
     while((entry = reader.next(entry)) != null) count++;
     assertTrue(count >= total);
     reader.close();
     // If I sync, should see double the edits.
     wal.sync();
-    reader = HLog.getReader(fs, walPath, conf);
+    reader = HLog.getReader(fs, walPathAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     count = 0;
     while((entry = reader.next(entry)) != null) count++;
     assertEquals(total * 2, count);
@@ -257,14 +259,14 @@ public class TestHLog  {
     }
     // Now I should have written out lots of blocks.  Sync then read.
     wal.sync();
-    reader = HLog.getReader(fs, walPath, conf);
+    reader = HLog.getReader(fs, walPathAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     count = 0;
     while((entry = reader.next(entry)) != null) count++;
     assertEquals(total * 3, count);
     reader.close();
     // Close it and ensure that closed, Reader gets right length also.
     wal.close();
-    reader = HLog.getReader(fs, walPath, conf);
+    reader = HLog.getReader(fs, walPathAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
     count = 0;
     while((entry = reader.next(entry)) != null) count++;
     assertEquals(total * 3, count);
@@ -299,12 +301,13 @@ public class TestHLog  {
     }
   }
 
-  private void verifySplits(List<Path> splits, final int howmany)
+  private void verifySplits(List<Path> splits, final int howmany) // FIXME (Fran): Use URI in TestHLog#verifySplits() ??? Probably NO because is related to splitting
   throws IOException {
     assertEquals(howmany, splits.size());
     for (int i = 0; i < splits.size(); i++) {
       LOG.info("Verifying=" + splits.get(i));
-      HLog.Reader reader = HLog.getReader(fs, splits.get(i), conf);
+      URI splitUri = splits.get(i).toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+      HLog.Reader reader = HLog.getReader(fs, splitUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
       try {
         int count = 0;
         String previousRegion = null;
@@ -478,10 +481,11 @@ public class TestHLog  {
       log.completeCacheFlush(info.getEncodedNameAsBytes(), tableName, logSeqId,
           info.isMetaRegion());
       log.close();
-      Path filename = new Path(log.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+//      Path filename = new Path(log.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+      URI filenameAsUri = log.computeFilename(); // BREADCRUMB (Fran): Use URI in getReader()
       log = null;
       // Now open a reader on the log and assert append worked.
-      reader = HLog.getReader(fs, filename, conf);
+      reader = HLog.getReader(fs, filenameAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
       // Above we added all columns on a single row so we only read one
       // entry in the below... thats why we have '1'.
       for (int i = 0; i < 1; i++) {
@@ -548,10 +552,11 @@ public class TestHLog  {
       long logSeqId = log.startCacheFlush(hri.getEncodedNameAsBytes());
       log.completeCacheFlush(hri.getEncodedNameAsBytes(), tableName, logSeqId, false);
       log.close();
-      Path filename = new Path(log.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+//      Path filename = new Path(log.computeFilename()); //BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+      URI filenameAsUri = log.computeFilename(); // BREADCRUMB (Fran): Use URI in getReader()
       log = null;
       // Now open a reader on the log and assert append worked.
-      reader = HLog.getReader(fs, filename, conf);
+      reader = HLog.getReader(fs, filenameAsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
       HLog.Entry entry = reader.next();
       assertEquals(COL_COUNT, entry.getEdit().size());
       int idx = 0;

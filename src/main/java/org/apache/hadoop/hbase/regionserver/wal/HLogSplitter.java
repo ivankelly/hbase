@@ -865,16 +865,17 @@ public class HLogSplitter {
    */
   protected Writer createWriter(FileSystem fs, Path logfile, Configuration conf)
       throws IOException {
-    URI logfileUri = logfile.toUri(); // FIXME (Fran): createWriter now should get URI, not path
+    URI logfileUri = logfile.toUri(); // FIXME (Fran): Use URI in HLogSplitter#createWriter() ???
     return HLog.createWriter(fs, logfileUri, conf);
   }
 
   /**
    * Create a new {@link Reader} for reading logs to split.
    */
-  protected Reader getReader(FileSystem fs, Path curLogFile, Configuration conf)
+  protected Reader getReader(FileSystem fs, Path curLogFile, Configuration conf) // FIXME (Fran): Use URI in HLogSplitter#getReader() ???
       throws IOException {
-    return HLog.getReader(fs, curLogFile, conf);
+    URI curLogFileUri = curLogFile.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
+    return HLog.getReader(fs, curLogFileUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
   }
 
   /**

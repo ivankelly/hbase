@@ -26,6 +26,7 @@ import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.text.ParseException;
 import java.util.AbstractList;
 import java.util.ArrayList;
@@ -2379,7 +2380,7 @@ public class HRegion implements HeapSize { // , Writable{
    * recovered edits log or <code>minSeqId</code> if nothing added from editlogs.
    * @throws IOException
    */
-  private long replayRecoveredEdits(final Path edits,
+  private long replayRecoveredEdits(final Path edits, // FIXME (Fran): Use URI in HRegion#replayRecoveredEdits()
       final long minSeqId, final CancelableProgressable reporter)
     throws IOException {
     String msg = "Replaying edits from " + edits + "; minSequenceid=" +
@@ -2390,7 +2391,8 @@ public class HRegion implements HeapSize { // , Writable{
     status.setStatus("Opening logs");
     HLog.Reader reader = null;
     try {
-      reader = HLog.getReader(this.fs, edits, conf);
+      URI editsUri = edits.toUri();
+      reader = HLog.getReader(this.fs, editsUri, conf); // BREADCRUMB (Fran): Use URI in getReader()
       long currentEditSeqId = minSeqId;
       long firstSeqIdInLog = -1;
       long skippedEdits = 0;
