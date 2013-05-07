@@ -27,6 +27,7 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.URI;
 import java.util.ArrayList;
@@ -918,7 +919,70 @@ public class HLog implements Syncable {
     if (filenum < 0) {
       throw new RuntimeException("hlog file number can't be < 0");
     }
-    return (new Path(new Path(dirUri), prefix + "." + filenum)).toUri(); // FIXME (Fran): Don't use Path to create the URI
+    return createUri(dirUri, prefix + "." + filenum); // BREADCRUMB (Fran): Don't use Path to create the URI
+  }
+
+  private URI createUri(URI parent, String pathChunk) { // BREADCRUMB (Fran): Don't use Path to create the URI
+      // Add a slash to parent's path so resolution is compatible with URI's
+      URI parentUri = parent;
+      String parentPath = parentUri.getPath();
+      if (!(parentPath.equals("/") || parentPath.equals(""))) {
+        try {
+          parentUri = new URI(parentUri.getScheme(), parentUri.getAuthority(),
+                        parentUri.getPath()+"/", null, parentUri.getFragment());
+        } catch (URISyntaxException e) {
+          throw new IllegalArgumentException(e);
+        }
+      }
+      URI childUri;
+      try {
+        childUri = new URI(null, null, normalizePath(pathChunk), null, null);
+      } catch(URISyntaxException e) {
+        throw new IllegalArgumentException(e);
+      }
+      URI resolved = parentUri.resolve(childUri);
+      URI resultUri;
+      try {
+        resultUri = new URI(resolved.getScheme(),
+                            resolved.getAuthority(),
+                            normalizePath(resolved.getPath()),
+                            null,
+                            resolved.getFragment()).normalize();
+      } catch (URISyntaxException e) {
+        throw new IllegalArgumentException(e);
+      }
+      return resultUri;
+  }
+
+  private String normalizePath(String path) {
+    // remove double slashes & backslashes
+    if (path.indexOf("//") != -1) {
+      path = path.replace("//", "/");
+    }
+    if (path.indexOf("\\") != -1) {
+      path = path.replace("\\", "/");
+    }
+
+    // trim trailing slash from non-root path (ignoring windows drive)
+    int minLength = hasWindowsDrive(path, true) ? 4 : 1;
+    if (path.length() > minLength && path.endsWith("/")) {
+      path = path.substring(0, path.length()-1);
+    }
+
+    return path;
+  }
+
+  static final boolean WINDOWS = System.getProperty("os.name").startsWith("Windows");
+
+  private boolean hasWindowsDrive(String path, boolean slashed) {
+    if (!WINDOWS) return false;
+    int start = slashed ? 1 : 0;
+    return
+      path.length() >= start+2 &&
+      (slashed ? path.charAt(0) == '/' : true) &&
+      path.charAt(start+1) == ':' &&
+      ((path.charAt(start) >= 'A' && path.charAt(start) <= 'Z') ||
+      (path.charAt(start) >= 'a' && path.charAt(start) <= 'z'));
   }
   
   /**
