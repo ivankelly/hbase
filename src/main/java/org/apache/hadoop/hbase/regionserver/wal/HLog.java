@@ -161,7 +161,7 @@ public class HLog implements Syncable {
   final static Object [] NO_ARGS = new Object []{};
 
   public interface Reader {
-    void init(FileSystem fs, Path path, Configuration c) throws IOException;
+    void init(FileSystem fs, URI uri, Configuration c) throws IOException; // BREADCRUMB (Fran): Use URI in Reader IF
     void close() throws IOException;
     Entry next() throws IOException;
     Entry next(Entry reuse) throws IOException;
@@ -697,7 +697,7 @@ public class HLog implements Syncable {
    * @return A WAL reader.  Close when done with it.
    * @throws IOException
    */
-  public static Reader getReader(final FileSystem fs,
+  public static Reader getReader(final FileSystem fs, // FIXME (Fran): Use URI in getReader()
     final Path path, Configuration conf)
   throws IOException {
     try {
@@ -710,7 +710,8 @@ public class HLog implements Syncable {
 
 
       HLog.Reader reader = logReaderClass.newInstance();
-      reader.init(fs, path, conf);
+      URI pathUri = path.toUri(); // BREADCRUMB (Fran): Use URI in Reader IF
+      reader.init(fs, pathUri, conf); // BREADCRUMB (Fran): Use URI in Reader IF
       return reader;
     } catch (IOException e) {
       throw e;

@@ -26,6 +26,7 @@ import java.lang.Class;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.util.Arrays;
 
 import org.apache.commons.logging.Log;
@@ -159,11 +160,11 @@ public class SequenceFileLogReader implements HLog.Reader {
 
 
   @Override
-  public void init(FileSystem fs, Path path, Configuration conf)
+  public void init(FileSystem fs, URI uri, Configuration conf) // BREADCRUMB (Fran): Use URI in Reader IF
       throws IOException {
     this.conf = conf;
-    this.path = path;
-    reader = new WALReader(fs, path, conf);
+    this.path = new Path(uri); // BREADCRUMB (Fran): Use URI in Reader IF
+    reader = new WALReader(fs, path, conf); // FIXME (Fran): Separate code for standard and BK WAL reading???
   }
 
   @Override
