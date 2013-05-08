@@ -306,7 +306,7 @@ public class HLog implements Syncable {
     return ret;
   }
 
-  private boolean isBkWalEnabled; // BREADCRUMB (Fran): Switch to select between Wal implementations
+  private static boolean isBkWalEnabled; // BREADCRUMB (Fran): Switch to select between Wal implementations
   
   /**
    * Constructor.
@@ -1722,19 +1722,24 @@ public class HLog implements Syncable {
   /**
    * Move aside a bad edits file.
    * @param fs
-   * @param edits Edits file to move aside.
-   * @return The name of the moved aside file.
+   * @param editsUri Edits file to move aside.
+   * @return The name of the moved aside file as a URI.
    * @throws IOException
    */
-  public static Path moveAsideBadEditsFile(final FileSystem fs,
-      final Path edits)
+  public static URI moveAsideBadEditsFile(final FileSystem fs, // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
+      final URI editsUri)
   throws IOException {
-    Path moveAsideName = new Path(edits.getParent(), edits.getName() + "." +
-      System.currentTimeMillis());
-    if (!fs.rename(edits, moveAsideName)) {
-      LOG.warn("Rename failed from " + edits + " to " + moveAsideName);
+    if(!isBkWalEnabled) { // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
+      Path edits = new Path(editsUri);
+      Path moveAsideName = new Path(edits.getParent(), edits.getName() + "." +
+        System.currentTimeMillis());
+      if (!fs.rename(edits, moveAsideName)) {
+        LOG.warn("Rename failed from " + edits + " to " + moveAsideName);
+      }
+      return moveAsideName.toUri();
+    } else { // FIXME (Fran): HLog#moveAsideBadEditsFile Return the right URI for BK
+      return editsUri; 
     }
-    return moveAsideName;
   }
 
   /**

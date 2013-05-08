@@ -2345,9 +2345,10 @@ public class HRegion implements HeapSize { // , Writable{
       } catch (IOException e) {
         boolean skipErrors = conf.getBoolean("hbase.skip.errors", false);
         if (skipErrors) {
-          Path p = HLog.moveAsideBadEditsFile(fs, edits); // FIXME (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
+          URI editsUri = edits.toUri(); // FIXME (Fran) BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
+          URI filenameAsUri = HLog.moveAsideBadEditsFile(fs, editsUri); // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
           LOG.error("hbase.skip.errors=true so continuing. Renamed " + edits +
-            " as " + p, e);
+            " as " + filenameAsUri, e);
         } else {
           throw e;
         }
@@ -2495,19 +2496,19 @@ public class HRegion implements HeapSize { // , Writable{
           }
         }
       } catch (EOFException eof) {
-        Path p = HLog.moveAsideBadEditsFile(fs, new Path(edits)); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() FIXME (Fran): Do we need to do something for BK ???
+        URI filenameAsUri = HLog.moveAsideBadEditsFile(fs, edits); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
         msg = "Encountered EOF. Most likely due to Master failure during " +
             "log spliting, so we have this data in another edit.  " +
-            "Continuing, but renaming " + edits + " as " + p;
+            "Continuing, but renaming " + edits + " as " + filenameAsUri;
         LOG.warn(msg, eof);
         status.abort(msg);
       } catch (IOException ioe) {
         // If the IOE resulted from bad file format,
         // then this problem is idempotent and retrying won't help
         if (ioe.getCause() instanceof ParseException) {
-          Path p = HLog.moveAsideBadEditsFile(fs, new Path(edits)); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() FIXME (Fran): Do we need to do something for BK ???
+          URI filenameAsUri = HLog.moveAsideBadEditsFile(fs, edits); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
           msg = "File corruption encountered!  " +
-              "Continuing, but renaming " + edits + " as " + p;
+              "Continuing, but renaming " + edits + " as " + filenameAsUri;
           LOG.warn(msg, ioe);
           status.setStatus(msg);
         } else {
