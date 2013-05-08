@@ -2330,7 +2330,7 @@ public class HRegion implements HeapSize { // , Writable{
       } else { // FIXME (Fran): Check if edits file is null or non-existent for BK
 
       }
-      if (isZeroLengthThenDelete(this.fs, new Path(edits))) continue; // FIXME (Fran): Use URI in HRegion#isZeroLengthThenDelete()
+      if (isZeroLengthThenDelete(this.fs, edits)) continue; // BREADCRUMB (Fran): Use URI in HRegion#isZeroLengthThenDelete()
 
       if (checkSafeToSkip) {
         URI higher = files.higher(edits); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
@@ -2578,13 +2578,18 @@ public class HRegion implements HeapSize { // , Writable{
    * @return True if file was zero-length (and if so, we'll delete it in here).
    * @throws IOException
    */
-  private static boolean isZeroLengthThenDelete(final FileSystem fs, final Path p)
+  private static boolean isZeroLengthThenDelete(final FileSystem fs, final URI uri)  // BREADCRUMB (Fran): Use URI in HRegion#isZeroLengthThenDelete()
       throws IOException {
-    FileStatus stat = fs.getFileStatus(p);
-    if (stat.getLen() > 0) return false;
-    LOG.warn("File " + p + " is zero-length, deleting.");
-    fs.delete(p, false);
-    return true;
+    if(!isBkWalEnabled) {
+      Path p = new Path(uri);
+      FileStatus stat = fs.getFileStatus(p);
+      if (stat.getLen() > 0) return false;
+      LOG.warn("File " + p + " is zero-length, deleting.");
+      fs.delete(p, false);
+      return true;
+    } else { // FIXME (Fran): Implement the required stuff for BK Wal in order to returning a bolean isZeroLengthThenDelete
+      return true;
+    }
   }
 
   protected Store instantiateHStore(Path tableDir, HColumnDescriptor c)
