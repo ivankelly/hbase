@@ -2998,7 +2998,8 @@ public class HBaseFsck {
             // This is special case if a region is left after split
             he.hdfsOnlyEdits = true;
             FileStatus[] subDirs = fs.listStatus(regionDir.getPath());
-            Path ePath = HLog.getRegionDirRecoveredEditsDir(regionDir.getPath());
+            URI eUri = HLog.getRegionDirRecoveredEditsDir(regionDir.getPath().toUri());
+            Path ePath = new Path(eUri);
             for (FileStatus subDir : subDirs) {
               String sdName = subDir.getPath().getName();
               if (!sdName.startsWith(".") && !sdName.equals(ePath.getName())) {

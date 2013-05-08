@@ -203,7 +203,8 @@ public class TestHRegion extends HBaseTestCase {
       FileSystem fs = region.getFilesystem();
       byte[] regionName = region.getRegionInfo().getEncodedNameAsBytes();
 
-      Path recoveredEditsDir = HLog.getRegionDirRecoveredEditsDir(regiondir);
+      URI recoveredEditsDirUri = HLog.getRegionDirRecoveredEditsDir(regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+      Path recoveredEditsDir = new Path(recoveredEditsDirUri);
 
       long maxSeqId = 1050;
       long minSeqId = 1000;
@@ -249,7 +250,8 @@ public class TestHRegion extends HBaseTestCase {
       FileSystem fs = region.getFilesystem();
       byte[] regionName = region.getRegionInfo().getEncodedNameAsBytes();
 
-      Path recoveredEditsDir = HLog.getRegionDirRecoveredEditsDir(regiondir);
+      URI recoveredEditsDirUri = HLog.getRegionDirRecoveredEditsDir(regiondir.toUri());
+      Path recoveredEditsDir = new Path(recoveredEditsDirUri);
 
       long maxSeqId = 1050;
       long minSeqId = 1000;
@@ -299,7 +301,8 @@ public class TestHRegion extends HBaseTestCase {
       Path regiondir = region.getRegionDir();
       FileSystem fs = region.getFilesystem();
 
-      Path recoveredEditsDir = HLog.getRegionDirRecoveredEditsDir(regiondir);
+      URI recoveredEditsDirUri = HLog.getRegionDirRecoveredEditsDir(regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+      Path recoveredEditsDir = new Path(recoveredEditsDirUri);
       for (int i = 1000; i < 1050; i += 10) {
         Path recoveredEdits = new Path(
             recoveredEditsDir, String.format("%019d", i));

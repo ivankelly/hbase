@@ -57,7 +57,8 @@ public class TestHLogMethods {
     Path regiondir = util.getDataTestDir("regiondir");
     fs.delete(regiondir, true);
     fs.mkdirs(regiondir);
-    Path recoverededits = HLog.getRegionDirRecoveredEditsDir(regiondir);
+    URI recoverededitsUri = HLog.getRegionDirRecoveredEditsDir(regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+    Path recoverededits = new Path(recoverededitsUri);
     String first = HLogSplitter.formatRecoveredEditsFileName(-1);
     createFile(fs, recoverededits, first);
     createFile(fs, recoverededits, HLogSplitter.formatRecoveredEditsFileName(0));

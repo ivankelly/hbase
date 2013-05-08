@@ -1207,8 +1207,9 @@ public class TestHLogSplit {
   private Path getLogForRegion(Path rootdir, byte[] table, String region)
   throws IOException {
     Path tdir = HTableDescriptor.getTableDir(rootdir, table);
-    Path editsdir = HLog.getRegionDirRecoveredEditsDir(HRegion.getRegionDir(tdir,
-      Bytes.toString(region.getBytes())));
+    URI editsdirUri = HLog.getRegionDirRecoveredEditsDir(HRegion.getRegionDir(tdir,
+      Bytes.toString(region.getBytes())).toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+    Path editsdir = new Path(editsdirUri);
     FileStatus [] files = this.fs.listStatus(editsdir);
     assertEquals(1, files.length);
     return files[0].getPath();
@@ -1350,10 +1351,12 @@ public class TestHLogSplit {
     for (int i = 0; i < f1.length; i++) {
       // Regions now have a directory named RECOVERED_EDITS_DIR and in here
       // are split edit files. In below presume only 1.
-      Path rd1 = HLog.getRegionDirRecoveredEditsDir(f1[i].getPath());
+      URI rd1Uri = HLog.getRegionDirRecoveredEditsDir(f1[i].getPath().toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+      Path rd1 = new Path(rd1Uri);
       FileStatus[] rd1fs = fs.listStatus(rd1);
       assertEquals(1, rd1fs.length);
-      Path rd2 = HLog.getRegionDirRecoveredEditsDir(f2[i].getPath());
+      URI rd2Uri = HLog.getRegionDirRecoveredEditsDir(f2[i].getPath().toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+      Path rd2 = new Path(rd2Uri);
       FileStatus[] rd2fs = fs.listStatus(rd2);
       assertEquals(1, rd2fs.length);
       if (!logsAreEqual(rd1fs[0].getPath(), rd2fs[0].getPath())) {

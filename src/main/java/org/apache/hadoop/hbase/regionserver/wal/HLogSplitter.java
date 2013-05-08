@@ -686,8 +686,9 @@ public class HLogSplitter {
         .getTablename());
     Path regiondir = HRegion.getRegionDir(tableDir,
         Bytes.toString(logEntry.getKey().getEncodedRegionName()));
-    Path dir = HLog.getRegionDirRecoveredEditsDir(regiondir);
-
+    URI dirUri = HLog.getRegionDirRecoveredEditsDir(regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+    Path dir = new Path(dirUri); // FIXME (Fran): Use URI in getRegionSplitEditsPath ???
+    
     if (!fs.exists(regiondir)) {
       LOG.info("This region's directory doesn't exist: "
           + regiondir.toString() + ". It is very likely that it was" +

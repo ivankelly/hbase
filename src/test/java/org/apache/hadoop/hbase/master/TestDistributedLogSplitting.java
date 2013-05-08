@@ -192,9 +192,10 @@ public class TestDistributedLogSplitting {
     for (HRegionInfo hri : regions) {
 
       Path tdir = HTableDescriptor.getTableDir(rootdir, table);
-      Path editsdir =
-        HLog.getRegionDirRecoveredEditsDir(HRegion.getRegionDir(tdir,
-        hri.getEncodedName()));
+      URI editsdirUri =
+        HLog.getRegionDirRecoveredEditsDir(HRegion.getRegionDir(tdir, // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+        hri.getEncodedName()).toUri());
+      Path editsdir = new Path(editsdirUri);
       LOG.debug("checking edits dir " + editsdir);
       FileStatus[] files = fs.listStatus(editsdir);
       assertEquals(1, files.length);

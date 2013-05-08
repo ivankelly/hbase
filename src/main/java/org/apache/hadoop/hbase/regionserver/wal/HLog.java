@@ -403,7 +403,7 @@ public class HLog implements Syncable {
           throw new IOException("Unable to mkdir " + oldLogDir);
         }
       }
-    } else { // BK specific stuff initialization FIXME (Fran): Initialize me
+    } else { // FIXME (Fran): BK specific stuff initialization
 	this.blocksize = 0L;
 	this.logrollsize = 0L;
 	this.optionalFlushInterval = 0L;
@@ -922,7 +922,7 @@ public class HLog implements Syncable {
     return createUri(dirUri, prefix + "." + filenum); // BREADCRUMB (Fran): Don't use Path to create the URI
   }
 
-  private URI createUri(URI parent, String pathChunk) { // BREADCRUMB (Fran): Don't use Path to create the URI
+  private static URI createUri(URI parent, String pathChunk) { // BREADCRUMB (Fran): Don't use Path to create the URI BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
       // Add a slash to parent's path so resolution is compatible with URI's
       URI parentUri = parent;
       String parentPath = parentUri.getPath();
@@ -954,7 +954,7 @@ public class HLog implements Syncable {
       return resultUri;
   }
 
-  private String normalizePath(String path) {
+  private static String normalizePath(String path) { // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
     // remove double slashes & backslashes
     if (path.indexOf("//") != -1) {
       path = path.replace("//", "/");
@@ -974,7 +974,7 @@ public class HLog implements Syncable {
 
   static final boolean WINDOWS = System.getProperty("os.name").startsWith("Windows");
 
-  private boolean hasWindowsDrive(String path, boolean slashed) {
+  private static boolean hasWindowsDrive(String path, boolean slashed) { // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
     if (!WINDOWS) return false;
     int start = slashed ? 1 : 0;
     return
@@ -1688,8 +1688,9 @@ public class HLog implements Syncable {
       final URI regiondir) // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
   throws IOException {
     NavigableSet<URI> filesSorted = new TreeSet<URI>(); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
-    Path editsdir = getRegionDirRecoveredEditsDir(new Path(regiondir)); // FIXME (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir()
+    URI editsdirUri = getRegionDirRecoveredEditsDir(regiondir); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir()
     if(!isBkWalEnabled) {  // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+      Path editsdir = new Path(editsdirUri);
       if (!fs.exists(editsdir)) return filesSorted;
       FileStatus[] files = FSUtils.listStatus(fs, editsdir, new PathFilter() {
         @Override
@@ -1751,8 +1752,8 @@ public class HLog implements Syncable {
    * @return The directory that holds recovered edits files for the region
    * <code>regiondir</code>
    */
-  public static Path getRegionDirRecoveredEditsDir(final Path regiondir) {
-    return new Path(regiondir, RECOVERED_EDITS_DIR);
+  public static URI getRegionDirRecoveredEditsDir(final URI regiondir) { // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
+    return createUri(regiondir, RECOVERED_EDITS_DIR);
   }
 
   public static final long FIXED_OVERHEAD = ClassSize.align(
