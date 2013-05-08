@@ -210,6 +210,7 @@ public class HRegion implements HeapSize { // , Writable{
   static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   final HRegionInfo regionInfo;
   final Path regiondir;
+  final URI regionWalUri; // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
   KeyValue.KVComparator comparator;
 
   private ConcurrentHashMap<RegionScanner, Long> scannerReadPoints;
@@ -318,6 +319,7 @@ public class HRegion implements HeapSize { // , Writable{
     this.memstoreFlushSize = 0L;
     this.log = null;
     this.regiondir = null;
+    this.regionWalUri = null; // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
     this.regionInfo = null;
     this.htableDescriptor = null;
     this.threadWakeFrequency = 0L;
@@ -366,6 +368,7 @@ public class HRegion implements HeapSize { // , Writable{
     String encodedNameStr = this.regionInfo.getEncodedName();
     setHTableSpecificConf();
     this.regiondir = getRegionDir(this.tableDir, encodedNameStr);
+    this.regionWalUri = this.regiondir.toUri(); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
     this.scannerReadPoints = new ConcurrentHashMap<RegionScanner, Long>();
 
     // don't initialize coprocessors if not running within a regionserver
@@ -468,8 +471,8 @@ public class HRegion implements HeapSize { // , Writable{
     }
     mvcc.initialize(maxMemstoreTS + 1);
     // Recover any edits if available.
-    maxSeqId = Math.max(maxSeqId, replayRecoveredEditsIfAny(
-        this.regiondir, minSeqId, reporter, status));
+    maxSeqId = Math.max(maxSeqId, replayRecoveredEditsIfAny( 
+        this.regionWalUri, minSeqId, reporter, status)); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
 
     status.setStatus("Cleaning up detritus from prior splits");
     // Get rid of any splits or merges that were lost in-progress.  Clean out
@@ -2303,12 +2306,13 @@ public class HRegion implements HeapSize { // , Writable{
    * @throws UnsupportedEncodingException
    * @throws IOException
    */
-  protected long replayRecoveredEditsIfAny(final Path regiondir, // FIXME (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
+  protected long replayRecoveredEditsIfAny(final URI regiondir, // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
       final long minSeqId, final CancelableProgressable reporter,
       final MonitoredTask status)
       throws UnsupportedEncodingException, IOException {
     long seqid = minSeqId;
-    NavigableSet<Path> files = HLog.getSplitEditFilesSorted(this.fs, regiondir);
+    Path regiondirPath = new Path(regiondir); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
+    NavigableSet<Path> files = HLog.getSplitEditFilesSorted(this.fs, regiondirPath); // FIXME (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
     if (files == null || files.isEmpty()) return seqid;
     boolean checkSafeToSkip = true;
     for (Path edits: files) {
@@ -2341,7 +2345,7 @@ public class HRegion implements HeapSize { // , Writable{
       } catch (IOException e) {
         boolean skipErrors = conf.getBoolean("hbase.skip.errors", false);
         if (skipErrors) {
-          Path p = HLog.moveAsideBadEditsFile(fs, edits);
+          Path p = HLog.moveAsideBadEditsFile(fs, edits); // FIXME (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
           LOG.error("hbase.skip.errors=true so continuing. Renamed " + edits +
             " as " + p, e);
         } else {
