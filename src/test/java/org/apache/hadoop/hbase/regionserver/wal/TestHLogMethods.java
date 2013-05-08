@@ -22,6 +22,7 @@ package org.apache.hadoop.hbase.regionserver.wal;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.NavigableSet;
 
 import org.apache.hadoop.conf.Configuration;
@@ -70,20 +71,20 @@ public class TestHLogMethods {
     createFile(fs, recoverededits, last);
     createFile(fs, recoverededits,
       Long.toString(Long.MAX_VALUE) + "." + System.currentTimeMillis());
-    NavigableSet<Path> files = HLog.getSplitEditFilesSorted(fs, regiondir);
+    NavigableSet<URI> files = HLog.getSplitEditFilesSorted(fs, regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
     assertEquals(7, files.size());
-    assertEquals(files.pollFirst().getName(), first);
-    assertEquals(files.pollLast().getName(), last);
-    assertEquals(files.pollFirst().getName(),
+    assertEquals(new Path(files.pollFirst()).getName(), first); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    assertEquals(new Path(files.pollLast()).getName(), last); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    assertEquals(new Path(files.pollFirst()).getName(), // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       HLogSplitter
         .formatRecoveredEditsFileName(0));
-    assertEquals(files.pollFirst().getName(),
+    assertEquals(new Path(files.pollFirst()).getName(), // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       HLogSplitter
         .formatRecoveredEditsFileName(1));
-    assertEquals(files.pollFirst().getName(),
+    assertEquals(new Path(files.pollFirst()).getName(), // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       HLogSplitter
         .formatRecoveredEditsFileName(2));
-    assertEquals(files.pollFirst().getName(),
+    assertEquals(new Path(files.pollFirst()).getName(), // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       HLogSplitter
         .formatRecoveredEditsFileName(11));
   }

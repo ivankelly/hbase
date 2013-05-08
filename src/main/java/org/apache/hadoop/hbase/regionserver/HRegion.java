@@ -19,6 +19,9 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
+import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
+import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -211,6 +214,7 @@ public class HRegion implements HeapSize { // , Writable{
   final HRegionInfo regionInfo;
   final Path regiondir;
   final URI regionWalUri; // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
+  private static boolean isBkWalEnabled; // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
   KeyValue.KVComparator comparator;
 
   private ConcurrentHashMap<RegionScanner, Long> scannerReadPoints;
@@ -369,6 +373,7 @@ public class HRegion implements HeapSize { // , Writable{
     setHTableSpecificConf();
     this.regiondir = getRegionDir(this.tableDir, encodedNameStr);
     this.regionWalUri = this.regiondir.toUri(); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
+    this.isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
     this.scannerReadPoints = new ConcurrentHashMap<RegionScanner, Long>();
 
     // don't initialize coprocessors if not running within a regionserver
@@ -2311,23 +2316,28 @@ public class HRegion implements HeapSize { // , Writable{
       final MonitoredTask status)
       throws UnsupportedEncodingException, IOException {
     long seqid = minSeqId;
-    Path regiondirPath = new Path(regiondir); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
-    NavigableSet<Path> files = HLog.getSplitEditFilesSorted(this.fs, regiondirPath); // FIXME (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+//    Path regiondirPath = new Path(regiondir); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
+    NavigableSet<URI> files = HLog.getSplitEditFilesSorted(this.fs, regiondir); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
     if (files == null || files.isEmpty()) return seqid;
     boolean checkSafeToSkip = true;
-    for (Path edits: files) {
-      if (edits == null || !this.fs.exists(edits)) {
-        LOG.warn("Null or non-existent edits file: " + edits);
-        continue;
+    for (URI edits: files) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+      if(!isBkWalEnabled) {
+        Path editsPath = new Path(edits); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+        if (editsPath == null || !this.fs.exists(editsPath)) {
+          LOG.warn("Null or non-existent edits file: " + editsPath);
+          continue;
+        }
+      } else { // FIXME (Fran): Check if edits file is null or non-existent for BK
+
       }
-      if (isZeroLengthThenDelete(this.fs, edits)) continue;
+      if (isZeroLengthThenDelete(this.fs, new Path(edits))) continue; // FIXME (Fran): Use URI in HRegion#isZeroLengthThenDelete()
 
       if (checkSafeToSkip) {
-        Path higher = files.higher(edits);
+        URI higher = files.higher(edits); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
         long maxSeqId = Long.MAX_VALUE;
         if (higher != null) {
           // Edit file name pattern, HLog.EDITFILES_NAME_PATTERN: "-?[0-9]+"
-          String fileName = higher.getName();
+          String fileName = getFileNameFromUri(higher); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
           maxSeqId = Math.abs(Long.parseLong(fileName));
         }
         if (maxSeqId <= minSeqId) {
@@ -2341,12 +2351,12 @@ public class HRegion implements HeapSize { // , Writable{
       }
 
       try {
-        seqid = replayRecoveredEdits(edits.toUri(), seqid, reporter); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits()
+        seqid = replayRecoveredEdits(edits, seqid, reporter); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEdits() BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       } catch (IOException e) {
         boolean skipErrors = conf.getBoolean("hbase.skip.errors", false);
         if (skipErrors) {
-          URI editsUri = edits.toUri(); // FIXME (Fran) BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
-          URI filenameAsUri = HLog.moveAsideBadEditsFile(fs, editsUri); // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
+//          URI editsUri = edits.toUri(); // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+          URI filenameAsUri = HLog.moveAsideBadEditsFile(fs, edits); // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
           LOG.error("hbase.skip.errors=true so continuing. Renamed " + edits +
             " as " + filenameAsUri, e);
         } else {
@@ -2366,16 +2376,29 @@ public class HRegion implements HeapSize { // , Writable{
       internalFlushcache(null, seqid, status);
     }
     // Now delete the content of recovered edits.  We're done w/ them.
-    for (Path file: files) {
-      if (!this.fs.delete(file, false)) {
-        LOG.error("Failed delete of " + file);
-      } else {
-        LOG.debug("Deleted recovered.edits file=" + file);
+    for (URI file: files) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+      if(!isBkWalEnabled) {
+        Path filePath = new Path(file); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+        if (!this.fs.delete(filePath, false)) {
+          LOG.error("Failed delete of " + filePath);
+        } else {
+          LOG.debug("Deleted recovered.edits file=" + filePath);
+        }
+      } else { // FIXME (Fran): Delete the recovered.edits file for BK
+	  
       }
     }
     return seqid;
   }
 
+  public static final String SEPARATOR = "/"; // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+  
+  public String getFileNameFromUri(URI uri) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    String path = uri.getPath();
+    int slash = path.lastIndexOf(SEPARATOR);
+    return path.substring(slash+1);
+  }
+  
   /*
    * @param edits File of recovered edits.
    * @param minSeqId Minimum sequenceid found in a store file.  Edits in log

@@ -1135,11 +1135,11 @@ public class TestHLogSplit {
         // After creating writer, simulate region's
         // replayRecoveredEditsIfAny() which gets SplitEditFiles of this
         // region and delete them, excluding files with '.temp' suffix.
-        NavigableSet<Path> files = HLog.getSplitEditFilesSorted(this.fs,
-            regiondir);
+        NavigableSet<URI> files = HLog.getSplitEditFilesSorted(this.fs, // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+            regiondir.toUri());
         if (files != null && !files.isEmpty()) {
-          for (Path file : files) {
-            if (!this.fs.delete(file, false)) {
+          for (URI file : files) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+            if (!this.fs.delete(new Path(file), false)) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
               LOG.error("Failed delete of " + file);
             } else {
               LOG.debug("Deleted recovered.edits file=" + file);

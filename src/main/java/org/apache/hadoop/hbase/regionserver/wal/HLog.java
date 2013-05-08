@@ -1009,7 +1009,7 @@ public class HLog implements Syncable {
       if (!fs.delete(dir, true)) {
         LOG.info("Unable to delete " + dir);
       }
-    } else { // BK specific stuff for closing FIXME (Fran): Fill me
+    } else { // FIXME (Fran): BK specific stuff for closing
 	
     }
   }
@@ -1684,37 +1684,41 @@ public class HLog implements Syncable {
    * @return Files in passed <code>regiondir</code> as a sorted set.
    * @throws IOException
    */
-  public static NavigableSet<Path> getSplitEditFilesSorted(final FileSystem fs,
-      final Path regiondir)
+  public static NavigableSet<URI> getSplitEditFilesSorted(final FileSystem fs,
+      final URI regiondir) // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
   throws IOException {
-    NavigableSet<Path> filesSorted = new TreeSet<Path>();
-    Path editsdir = getRegionDirRecoveredEditsDir(regiondir);
-    if (!fs.exists(editsdir)) return filesSorted;
-    FileStatus[] files = FSUtils.listStatus(fs, editsdir, new PathFilter() {
-      @Override
-      public boolean accept(Path p) {
-        boolean result = false;
-        try {
-          // Return files and only files that match the editfile names pattern.
-          // There can be other files in this directory other than edit files.
-          // In particular, on error, we'll move aside the bad edit file giving
-          // it a timestamp suffix.  See moveAsideBadEditsFile.
-          Matcher m = EDITFILES_NAME_PATTERN.matcher(p.getName());
-          result = fs.isFile(p) && m.matches();
-          // Skip the file whose name ends with RECOVERED_LOG_TMPFILE_SUFFIX,
-          // because it means splithlog thread is writting this file.
-          if (p.getName().endsWith(RECOVERED_LOG_TMPFILE_SUFFIX)) {
-            result = false;
+    NavigableSet<URI> filesSorted = new TreeSet<URI>(); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    Path editsdir = getRegionDirRecoveredEditsDir(new Path(regiondir)); // FIXME (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir()
+    if(!isBkWalEnabled) {  // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+      if (!fs.exists(editsdir)) return filesSorted;
+      FileStatus[] files = FSUtils.listStatus(fs, editsdir, new PathFilter() {
+        @Override
+        public boolean accept(Path p) {
+          boolean result = false;
+          try {
+            // Return files and only files that match the editfile names pattern.
+            // There can be other files in this directory other than edit files.
+            // In particular, on error, we'll move aside the bad edit file giving
+            // it a timestamp suffix.  See moveAsideBadEditsFile.
+            Matcher m = EDITFILES_NAME_PATTERN.matcher(p.getName());
+            result = fs.isFile(p) && m.matches();
+            // Skip the file whose name ends with RECOVERED_LOG_TMPFILE_SUFFIX,
+            // because it means splithlog thread is writting this file.
+            if (p.getName().endsWith(RECOVERED_LOG_TMPFILE_SUFFIX)) {
+              result = false;
+            }
+          } catch (IOException e) {
+            LOG.warn("Failed isFile check on " + p);
           }
-        } catch (IOException e) {
-          LOG.warn("Failed isFile check on " + p);
+          return result;
         }
-        return result;
+      });
+      if (files == null) return filesSorted;
+      for (FileStatus status: files) {
+        filesSorted.add(status.getPath().toUri()); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       }
-    });
-    if (files == null) return filesSorted;
-    for (FileStatus status: files) {
-      filesSorted.add(status.getPath());
+    } else { // FIXME (Fran): Return the right NavigableSet of URIs for BK
+      
     }
     return filesSorted;
   }
