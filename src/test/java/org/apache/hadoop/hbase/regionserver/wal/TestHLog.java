@@ -301,7 +301,7 @@ public class TestHLog  {
     }
   }
 
-  private void verifySplits(List<Path> splits, final int howmany) // FIXME (Fran): Use URI in TestHLog#verifySplits() ??? Probably NO because is related to splitting
+  private void verifySplits(List<Path> splits, final int howmany)
   throws IOException {
     assertEquals(howmany, splits.size());
     for (int i = 0; i < splits.size(); i++) {

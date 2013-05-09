@@ -687,7 +687,7 @@ public class HLogSplitter {
     Path regiondir = HRegion.getRegionDir(tableDir,
         Bytes.toString(logEntry.getKey().getEncodedRegionName()));
     URI dirUri = HLog.getRegionDirRecoveredEditsDir(regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
-    Path dir = new Path(dirUri); // FIXME (Fran): Use URI in getRegionSplitEditsPath ???
+    Path dir = new Path(dirUri);
     
     if (!fs.exists(regiondir)) {
       LOG.info("This region's directory doesn't exist: "
@@ -866,14 +866,14 @@ public class HLogSplitter {
    */
   protected Writer createWriter(FileSystem fs, Path logfile, Configuration conf)
       throws IOException {
-    URI logfileUri = logfile.toUri(); // FIXME (Fran): Use URI in HLogSplitter#createWriter() ???
+    URI logfileUri = logfile.toUri();
     return HLog.createWriter(fs, logfileUri, conf);
   }
 
   /**
    * Create a new {@link Reader} for reading logs to split.
    */
-  protected Reader getReader(FileSystem fs, Path curLogFile, Configuration conf) // FIXME (Fran): Use URI in HLogSplitter#getReader() ???
+  protected Reader getReader(FileSystem fs, Path curLogFile, Configuration conf)
       throws IOException {
     URI curLogFileUri = curLogFile.toUri(); // BREADCRUMB (Fran): Use URI in getReader()
     return HLog.getReader(fs, curLogFileUri, conf); // BREADCRUMB (Fran): Use URI in getReader()

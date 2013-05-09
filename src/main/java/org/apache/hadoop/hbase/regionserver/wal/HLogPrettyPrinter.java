@@ -224,7 +224,7 @@ public class HLogPrettyPrinter {
    *           may be unable to access the configured filesystem or requested
    *           file.
    */
-  public void processFile(final Configuration conf, final Path p) // FIXME (Fran): Use URI in HLogPrettyPrinter#processFile() ???
+  public void processFile(final Configuration conf, final Path p)
       throws IOException {
     FileSystem fs = FileSystem.get(conf);
     if (!fs.exists(p)) {

@@ -164,7 +164,7 @@ public class SequenceFileLogReader implements HLog.Reader {
       throws IOException {
     this.conf = conf;
     this.path = new Path(uri); // BREADCRUMB (Fran): Use URI in Reader IF
-    reader = new WALReader(fs, path, conf); // FIXME (Fran): Separate code for standard and BK WAL reading???
+    reader = new WALReader(fs, path, conf);
   }
 
   @Override

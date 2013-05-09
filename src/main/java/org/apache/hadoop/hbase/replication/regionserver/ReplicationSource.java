@@ -492,7 +492,7 @@ public class ReplicationSource extends Thread
           " at " + this.position);
       try {
        this.reader = null;
-       URI currentPathAsUri = this.currentPath.toUri(); // BREADCRUMB (Fran): Use URI in getReader() FIXME (Fran): Use URI in ReplicationSource ???
+       URI currentPathAsUri = this.currentPath.toUri(); // BREADCRUMB (Fran): Use URI in getReader() FIXME (Fran): Use URI in ReplicationSource ??? We don't know yet, so we keep this fixme just in case
        this.reader = HLog.getReader(this.fs, currentPathAsUri, this.conf); // BREADCRUMB (Fran): Use URI in getReader()
       } catch (FileNotFoundException fnfe) {
         if (this.queueRecovered) {
