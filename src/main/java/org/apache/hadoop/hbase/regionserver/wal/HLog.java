@@ -636,19 +636,22 @@ public class HLog implements Syncable {
         URI oldFileUri = cleanupCurrentWriter(currentFilenum); // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
         this.writer = nextWriter;
         if(!isBkWalEnabled) { // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
-            this.hdfs_out = nextHdfsOut; // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
-            if ((oldFileUri != null) && (newUri != null)) {
-              Path oldFile = new Path(oldFileUri);
-              Path newPath = new Path(newUri);
-              LOG.info((oldFile != null?
-        	      "Roll " + FSUtils.getPath(oldFile) + ", entries=" +
-        	      this.numEntries.get() +
-        	      ", filesize=" +
-        	      this.fs.getFileStatus(oldFile).getLen() + ". ": "") +
-        	      " for " + FSUtils.getPath(newPath));
-            }
-        } else { // FIXME (Fran): Create a log message for BK WAL
-            
+          this.hdfs_out = nextHdfsOut; // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+          if ((oldFileUri != null) && (newUri != null)) {
+            Path oldFile = new Path(oldFileUri);
+            Path newPath = new Path(newUri);
+            LOG.info("Roll " + FSUtils.getPath(oldFile) + ", entries=" +
+                     this.numEntries.get() +
+                     ", filesize=" +
+                     this.fs.getFileStatus(oldFile).getLen() + ". " +
+                     " for " + FSUtils.getPath(newPath));
+          }
+        } else {
+          if ((oldFileUri != null) && (newUri != null)) {
+           // TODO (Fran): The BK message lacks "filesize". Add it if required in the future
+            LOG.info("Roll " + oldFileUri.getPath() + ", entries=" +
+                    this.numEntries.get() + ". " + " for " + newUri.getPath());
+          }
         }
         this.numEntries.set(0);        
       }
