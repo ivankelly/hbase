@@ -119,6 +119,7 @@ import com.google.common.collect.ClassToInstanceMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.MutableClassToInstanceMap;
+import com.google.common.base.Charsets;
 
 /**
  * HRegion stores data for a certain region of a table.  It stores all columns
@@ -372,8 +373,20 @@ public class HRegion implements HeapSize { // , Writable{
     String encodedNameStr = this.regionInfo.getEncodedName();
     setHTableSpecificConf();
     this.regiondir = getRegionDir(this.tableDir, encodedNameStr);
-    this.regionWalUri = this.regiondir.toUri(); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
-    this.isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    this.isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
+    if (isBkWalEnabled) {
+      if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
+                          HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
+        this.regionWalUri = URI.create("dummy://"
+            + new String(regionInfo.getTableName(), Charsets.UTF_8)
+            + "/" + regionInfo.getEncodedName());
+      } else {
+        this.regionWalUri = URI.create("bk://blah/foobar/fixme");
+      }
+    } else {
+      this.regionWalUri = this.regiondir.toUri(); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
+    }
+
     this.scannerReadPoints = new ConcurrentHashMap<RegionScanner, Long>();
 
     // don't initialize coprocessors if not running within a regionserver
@@ -2580,14 +2593,17 @@ public class HRegion implements HeapSize { // , Writable{
    */
   private static boolean isZeroLengthThenDelete(final FileSystem fs, final URI uri)  // BREADCRUMB (Fran): Use URI in HRegion#isZeroLengthThenDelete()
       throws IOException {
-    if(!isBkWalEnabled) {
+    if (HLog.isHdfsUri(uri)) {
       Path p = new Path(uri);
       FileStatus stat = fs.getFileStatus(p);
       if (stat.getLen() > 0) return false;
       LOG.warn("File " + p + " is zero-length, deleting.");
       fs.delete(p, false);
       return true;
-    } else { // FIXME (Fran): Implement the required stuff for BK Wal in order to returning a bolean isZeroLengthThenDelete
+    } else if (HLog.isDummyUri(uri)) {
+      // FIXME (Fran): Implement the required stuff for BK Wal in order to returning a bolean isZeroLengthThenDelete
+      return false;
+    } else {
       return true;
     }
   }
