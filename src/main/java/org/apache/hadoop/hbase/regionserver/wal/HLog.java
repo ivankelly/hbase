@@ -1679,6 +1679,20 @@ public class HLog implements Syncable {
     return String.format("%019d", seqid);
   }
 
+  public static boolean isHdfsUri(URI uri) {
+    return uri.getScheme() == null
+      || uri.getScheme().equals("hdfs")
+      || uri.getScheme().equals("file");
+  }
+
+  public static boolean isDummyUri(URI uri) {
+    return uri.getScheme() != null && uri.getScheme().equals("dummy");
+  }
+
+  public static boolean isBookKeeperUri(URI uri) {
+    return uri.getScheme() != null && uri.getScheme().equals("bookkeeper");
+  }
+
   /**
    * Returns sorted set of edit files made by wal-log splitter, excluding files
    * with '.temp' suffix.
@@ -1688,11 +1702,17 @@ public class HLog implements Syncable {
    * @throws IOException
    */
   public static NavigableSet<URI> getSplitEditFilesSorted(final FileSystem fs,
-      final URI regiondir) // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+                                                          final URI regiondir)
+  // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
   throws IOException {
-    NavigableSet<URI> filesSorted = new TreeSet<URI>(); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
-    URI editsdirUri = getRegionDirRecoveredEditsDir(regiondir); // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir()
-    if(!isBkWalEnabled) {  // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    LOG.info("Getting splits from " + regiondir);
+    NavigableSet<URI> filesSorted = new TreeSet<URI>();
+    // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+
+    if (isHdfsUri(regiondir)) {
+      // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+      URI editsdirUri = getRegionDirRecoveredEditsDir(regiondir);
+      // BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir()
       Path editsdir = new Path(editsdirUri);
       if (!fs.exists(editsdir)) return filesSorted;
       FileStatus[] files = FSUtils.listStatus(fs, editsdir, new PathFilter() {
@@ -1721,8 +1741,12 @@ public class HLog implements Syncable {
       for (FileStatus status: files) {
         filesSorted.add(status.getPath().toUri()); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
       }
-    } else { // FIXME (Fran): Return the right NavigableSet of URIs for BK
-      
+    } else if (isDummyUri(regiondir)) {
+      // Fixed set of logs for dummy
+      filesSorted.add(URI.create(regiondir.toString() + "/00001?keyprefix=foobar&count=10"));
+      filesSorted.add(URI.create(regiondir.toString() + "/00201?keyprefix=foobaz&count=100"));
+      filesSorted.add(URI.create(regiondir.toString() + "/00401?keyprefix=barfoo&count=1000"));
+    } else if (isBookKeeperUri(regiondir)) {
     }
     return filesSorted;
   }
