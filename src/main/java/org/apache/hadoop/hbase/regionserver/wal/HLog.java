@@ -1677,16 +1677,17 @@ public class HLog implements Syncable {
   }
 
   public static boolean isHdfsUri(URI uri) {
-    return uri.getScheme().equals("hdfs")
+    return uri.getScheme() == null
+      || uri.getScheme().equals("hdfs")
       || uri.getScheme().equals("file");
   }
 
   public static boolean isDummyUri(URI uri) {
-    return uri.getScheme().equals("dummy");
+    return uri.getScheme() != null && uri.getScheme().equals("dummy");
   }
 
   public static boolean isBookKeeperUri(URI uri) {
-    return uri.getScheme().equals("bookkeeper");
+    return uri.getScheme() != null && uri.getScheme().equals("bookkeeper");
   }
 
   /**
