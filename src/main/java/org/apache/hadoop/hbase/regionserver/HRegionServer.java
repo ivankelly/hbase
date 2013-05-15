@@ -30,6 +30,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.BindException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -153,9 +154,12 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.zookeeper.KeeperException;
 import org.codehaus.jackson.map.ObjectMapper;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 
+import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
+import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
 /**
  * HRegionServer makes a set of HRegions available to clients. It checks in with
  * the HMaster. There are many HRegionServers in a single HBase deployment.
@@ -1188,35 +1192,55 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
    * @throws IOException
    */
   private HLog setupWALAndReplication() throws IOException {
-    final Path oldLogDir = new Path(rootDir, HConstants.HREGION_OLDLOGDIR_NAME);
-    Path logdir = new Path(rootDir,
-      HLog.getHLogDirectoryName(this.serverNameFromMasterPOV.toString()));
-    if (LOG.isDebugEnabled()) LOG.debug("logdir=" + logdir);
-    if (this.fs.exists(logdir)) {
-      throw new RegionServerRunningException("Region server has already " +
-        "created directory at " + this.serverNameFromMasterPOV.toString());
-    }
+    boolean isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
+    if (isBkWalEnabled) { // BREADCRUMB (Fran): Change HLog constructor to use URI
+      if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
+                          HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
+        URI logDir = URI.create("dummy://"
+                  + new String(conf.get(HConstants.HBASE_DIR))
+                  + "/" 
+                  + new String(HLog.getHLogDirectoryName(this.serverNameFromMasterPOV.toString())));
+        URI oldLogDir = URI.create("dummy://"
+                  + new String(conf.get(HConstants.HBASE_DIR))
+                  + "/" 
+                  + new String(HConstants.HREGION_OLDLOGDIR_NAME));
+        return instantiateHLog(logDir, oldLogDir);
+      } else { // FIXME (Fran): Initialize BK log instantiation with the right directories
+        URI logDir = URI.create("bk://logdir");
+        URI oldLogDir = URI.create("bk://oldlogdir");
+        return instantiateHLog(logDir, oldLogDir);
+      }
+    } else {
+      final Path oldLogDir = new Path(rootDir, HConstants.HREGION_OLDLOGDIR_NAME);
+      Path logdir = new Path(rootDir,
+        HLog.getHLogDirectoryName(this.serverNameFromMasterPOV.toString()));
+      if (LOG.isDebugEnabled()) LOG.debug("logdir=" + logdir);
+      if (this.fs.exists(logdir)) {
+        throw new RegionServerRunningException("Region server has already " +
+          "created directory at " + this.serverNameFromMasterPOV.toString());
+      }
 
-    // Instantiate replication manager if replication enabled.  Pass it the
-    // log directories.
-    try {
-      this.replicationHandler = Replication.isReplication(this.conf)?
-        new Replication(this, this.fs, logdir, oldLogDir): null;
-    } catch (KeeperException e) {
-      throw new IOException("Failed replication handler create", e);
+      // Instantiate replication manager if replication enabled.  Pass it the
+      // log directories.
+      try {
+        this.replicationHandler = Replication.isReplication(this.conf)?
+          new Replication(this, this.fs, logdir, oldLogDir): null;
+      } catch (KeeperException e) {
+        throw new IOException("Failed replication handler create", e);
+      }
+      return instantiateHLog(logdir.toUri(), oldLogDir.toUri()); // BREADCRUMB (Fran): Change HLog constructor to use URI
     }
-    return instantiateHLog(logdir, oldLogDir);
   }
 
   /**
    * Called by {@link #setupWALAndReplication()} creating WAL instance.
-   * @param logdir
-   * @param oldLogDir
+   * @param logdirUri
+   * @param oldLogDirUri
    * @return WAL instance.
    * @throws IOException
    */
-  protected HLog instantiateHLog(Path logdir, Path oldLogDir) throws IOException {
-    return new HLog(this.fs, logdir, oldLogDir, this.conf,
+  protected HLog instantiateHLog(URI logdirUri, URI oldLogDirUri) throws IOException { // BREADCRUMB (Fran): Change HLog constructor to use URI
+    return new HLog(this.fs, logdirUri, oldLogDirUri, this.conf,
       getWALActionListeners(), this.serverNameFromMasterPOV.toString());
   }
 

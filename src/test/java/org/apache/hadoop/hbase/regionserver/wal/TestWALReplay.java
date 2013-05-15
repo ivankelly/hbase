@@ -605,7 +605,7 @@ public class TestWALReplay {
    * @throws IOException
    */
   private HLog createWAL(final Configuration c) throws IOException {
-    HLog wal = new HLog(FileSystem.get(c), logDir, oldLogDir, c);
+    HLog wal = new HLog(FileSystem.get(c), logDir.toUri(), oldLogDir.toUri(), c); // BREADCRUMB (Fran): Change HLog constructor to use URI
     // Set down maximum recovery so we dfsclient doesn't linger retrying something
     // long gone.
     HBaseTestingUtility.setMaxRecoveryErrorCount(wal.getOutputStream(), 1);

@@ -135,7 +135,7 @@ public class TestStore extends TestCase {
     HTableDescriptor htd = new HTableDescriptor(table);
     htd.addFamily(hcd);
     HRegionInfo info = new HRegionInfo(htd.getName(), null, null, false);
-    HLog hlog = new HLog(fs, logdir, oldLogDir, conf);
+    HLog hlog = new HLog(fs, logdir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     HRegion region = new HRegion(basedir, hlog, fs, conf, info, htd, null);
 
     store = new Store(basedir, region, hcd, fs, conf);

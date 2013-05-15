@@ -139,7 +139,7 @@ public class TestHLog  {
     final byte [] tableName = Bytes.toBytes(getName());
     final byte [] rowName = tableName;
     Path logdir = new Path(hbaseDir, HConstants.HREGION_LOGDIR_NAME);
-    HLog log = new HLog(fs, logdir, oldLogDir, conf);
+    HLog log = new HLog(fs, logdir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     final int howmany = 3;
     HRegionInfo[] infos = new HRegionInfo[3];
     Path tabledir = new Path(hbaseDir, getName());
@@ -206,7 +206,7 @@ public class TestHLog  {
     out.close();
     in.close();
     Path subdir = new Path(dir, "hlogdir");
-    HLog wal = new HLog(fs, subdir, oldLogDir, conf);
+    HLog wal = new HLog(fs, subdir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     final int total = 20;
 
     HRegionInfo info = new HRegionInfo(bytes,
@@ -345,7 +345,7 @@ public class TestHLog  {
              HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, false);
     Path subdir = new Path(dir, "hlogdir");
     Path archdir = new Path(dir, "hlogdir_archive");
-    HLog wal = new HLog(fs, subdir, archdir, conf);
+    HLog wal = new HLog(fs, subdir.toUri(), archdir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     final int total = 20;
     HTableDescriptor htd = new HTableDescriptor();
     htd.addFamily(new HColumnDescriptor(tableName));
@@ -460,7 +460,7 @@ public class TestHLog  {
     final byte [] tableName = Bytes.toBytes("tablename");
     final byte [] row = Bytes.toBytes("row");
     HLog.Reader reader = null;
-    HLog log = new HLog(fs, dir, oldLogDir, conf);
+    HLog log = new HLog(fs, dir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     try {
       // Write columns named 1, 2, 3, etc. and then values of single byte
       // 1, 2, 3...
@@ -533,7 +533,7 @@ public class TestHLog  {
     final byte [] tableName = Bytes.toBytes("tablename");
     final byte [] row = Bytes.toBytes("row");
     Reader reader = null;
-    HLog log = new HLog(fs, dir, oldLogDir, conf);
+    HLog log = new HLog(fs, dir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     try {
       // Write columns named 1, 2, 3, etc. and then values of single byte
       // 1, 2, 3...
@@ -602,7 +602,7 @@ public class TestHLog  {
     final int COL_COUNT = 10;
     final byte [] tableName = Bytes.toBytes("tablename");
     final byte [] row = Bytes.toBytes("row");
-    HLog log = new HLog(fs, dir, oldLogDir, conf);
+    HLog log = new HLog(fs, dir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     DumbWALActionsListener visitor = new DumbWALActionsListener();
     log.registerWALActionsListener(visitor);
     long timestamp = System.currentTimeMillis();
@@ -634,7 +634,7 @@ public class TestHLog  {
     final byte [] tableName = Bytes.toBytes("testLogCleaning");
     final byte [] tableName2 = Bytes.toBytes("testLogCleaning2");
 
-    HLog log = new HLog(fs, dir, oldLogDir, conf);
+    HLog log = new HLog(fs, dir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     HRegionInfo hri = new HRegionInfo(tableName,
         HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
     HRegionInfo hri2 = new HRegionInfo(tableName2,
@@ -681,7 +681,7 @@ public class TestHLog  {
   @Test
   public void testWALCoprocessorLoaded() throws Exception {
     // test to see whether the coprocessor is loaded or not.
-    HLog log = new HLog(fs, dir, oldLogDir, conf);
+    HLog log = new HLog(fs, dir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     WALCoprocessorHost host = log.getCoprocessorHost();
     Coprocessor c = host.findCoprocessor(SampleRegionWALObserver.class.getName());
     assertNotNull(c);

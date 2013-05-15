@@ -312,15 +312,15 @@ public class HLog implements Syncable {
    * Constructor.
    *
    * @param fs filesystem handle
-   * @param dir path to where hlogs are stored
-   * @param oldLogDir path to where hlogs are archived
+   * @param dirUri path as URI to where hlogs are stored
+   * @param oldLogDirUri path as URI to where hlogs are archived
    * @param conf configuration to use
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
+  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri,
               final Configuration conf)
   throws IOException {
-    this(fs, dir, oldLogDir, conf, null, true, null);
+    this(fs, dirUri, oldLogDirUri, conf, null, true, null);
   }
 
   /**
@@ -331,8 +331,8 @@ public class HLog implements Syncable {
    * HLog object is started up.
    *
    * @param fs filesystem handle
-   * @param dir path to where hlogs are stored
-   * @param oldLogDir path to where hlogs are archived
+   * @param dirUri path as URI to where hlogs are stored
+   * @param oldLogDirUri path as URI to where hlogs are archived
    * @param conf configuration to use
    * @param listeners Listeners on WAL events. Listeners passed here will
    * be registered before we do anything else; e.g. the
@@ -342,10 +342,10 @@ public class HLog implements Syncable {
    *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
+  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
       final Configuration conf, final List<WALActionsListener> listeners,
       final String prefix) throws IOException {
-    this(fs, dir, oldLogDir, conf, listeners, true, prefix);
+    this(fs, dirUri, oldLogDirUri, conf, listeners, true, prefix);
   }
 
   /**
@@ -356,8 +356,7 @@ public class HLog implements Syncable {
    * HLog object is started up.
    *
    * @param fs filesystem handle
-   * @param dir path to where hlogs are stored
-   * @param oldLogDir path to where hlogs are archived
+   * @param dirUri path as URI to where hlogs are stored
    * @param conf configuration to use
    * @param listeners Listeners on WAL events. Listeners passed here will
    * be registered before we do anything else; e.g. the
@@ -368,14 +367,14 @@ public class HLog implements Syncable {
    *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
+  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
       final Configuration conf, final List<WALActionsListener> listeners,
       final boolean failIfLogDirExists, final String prefix)
   throws IOException {
     super();
     this.fs = fs;
-    this.dirUri = dir.toUri(); // BREADCRUMB (Fran): This mimics dir but as URI
-    this.oldLogDirUri = oldLogDir.toUri(); // BREADCRUMB (Fran): Remove oldLogDir as Path
+    this.dirUri = dirUri; // BREADCRUMB (Fran): This mimics dir but as URI  BREADCRUMB (Fran): Change HLog constructor to use URI
+    this.oldLogDirUri = oldLogDirUri; // BREADCRUMB (Fran): Remove oldLogDir as Path BREADCRUMB (Fran): Change HLog constructor to use URI
     this.conf = conf;
     if (listeners != null) {
       for (WALActionsListener i: listeners) {
@@ -385,6 +384,8 @@ public class HLog implements Syncable {
     // BREADCRUMB (Fran): Remove dir as Path
     isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
     if(!isBkWalEnabled) {
+      Path dir = new Path(this.dirUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
+      Path oldLogDir = new Path(this.oldLogDirUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
       this.blocksize = conf.getLong("hbase.regionserver.hlog.blocksize",
           getDefaultBlockSize(dir));
       // Roll at 95% of block size.
