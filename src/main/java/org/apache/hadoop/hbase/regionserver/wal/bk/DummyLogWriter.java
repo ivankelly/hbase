@@ -2,6 +2,7 @@ package org.apache.hadoop.hbase.regionserver.wal.bk;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 //import org.apache.bookkeeper.client.BKException;
@@ -14,82 +15,68 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Entry;
+import org.apache.hadoop.hbase.regionserver.wal.HLog.Writer;
 import org.apache.hadoop.hbase.util.Writables;
 
 public class DummyLogWriter implements HLog.Writer {
 
-    private static final Log LOG = LogFactory.getLog(DummyLogWriter.class);
-
-    private static final String PWD = "pwd";
+  private static final Log LOG = LogFactory.getLog(DummyLogWriter.class);
+  // Hashmap mapping from URI to writer
+  // A test accesses this map and verifies what has been written to it
+  final static ConcurrentHashMap<URI, Writer> regionWriters = new ConcurrentHashMap<URI, Writer>();
     
-    private final AtomicLong entriesWrittenCount = new AtomicLong(0);
-    
-//    private BookKeeper bk;
-//    private LedgerHandler lh;
-    private Object lh = null; // FIXME (Fran): Remove me
-    
-    /*
-     */
-    @Override
-    public void init(FileSystem fs, URI uri, Configuration c)
-	    throws IOException {
-//      ClientConfiguration conf = new ClientConfiguration(); // FIXME (Fran): Check BK Configuration
-//      conf.setZkServers(c.get("hbase.zookeeper.quorum"));
-//      conf.setReadTimeout(100000000);
-//
-//      bk = new BookKeeper(conf);
-//      lh = bk.createLedger(3, 3, DigestType.CRC32, PWD.getBytes());
-      lh = new Object();
-    }
+  private final AtomicLong entriesWrittenCount = new AtomicLong(0);
 
-    /*
-     */
-    @Override
-    public void close() throws IOException {
-      lh = null;
-//      try {
-//        lh.close();
-//      } catch (InterruptedException ie) {
-//        Thread.currentThread().interrupt();
-//        LOG.error("Interrupted ", ie);
-//      } catch (BKException bke) {
-//        LOG.error("Error closing handle", bke);
-//      }
+  private boolean initialized = false;
+  /*
+   */
+  @Override
+  public void init(FileSystem fs, URI uri, Configuration c) throws IOException {
+    LOG.info("Initializing for URI " + uri);
+    if(uri == null) {
+        throw new IOException("URI should not be null");
     }
+    // Add this writer to map
+    regionWriters.put(uri, this);
+    initialized = true;
+  }
 
-    /*
-     */
-    @Override
-    public void sync() throws IOException {
-      // FIXME (Fran): Is it possible to perform explicit sync on BK ???
-    }
+  /*
+   */
+  @Override
+  public void close() throws IOException {
+    LOG.info("Closing");
+    initialized = false;
+  }
 
-    /*
-     */
-    @Override
-    public void append(Entry entry) throws IOException {
-//      try {
-//        lh.addEntry(Writables.getBytes(entry)); // XXX Use async ???
-//      } catch (InterruptedException ie) {
-//        Thread.currentThread().interrupt();
-//        LOG.error("Interrupted ", ie);
-//        throw new IOException();
-//      } catch (BKException bke) {
-//        LOG.error("Error closing handle", bke);
-//        throw new IOException();
-//      }
-      if (lh == null) {
-        throw new IOException();
-      }
-      entriesWrittenCount.incrementAndGet();
-    }
+  /*
+   */
+  @Override
+  public void sync() throws IOException {
+    stopIfNotInitialized();
+//    LOG.info("Synchronizing");
+  }
 
-    /*
-     */
-    @Override
-    public long getLength() throws IOException {
-//      return lh.getLastAddConfirmed();
-      return entriesWrittenCount.get();
+  /*
+   */
+  @Override
+  public void append(Entry entry) throws IOException {
+    stopIfNotInitialized();
+    entriesWrittenCount.incrementAndGet();
+    LOG.info("Append entry " + entry);
+  }
+
+  /*
+   */
+  @Override
+  public long getLength() throws IOException {
+    return entriesWrittenCount.get();
+  }
+  
+  private void stopIfNotInitialized() throws IOException {
+    if ( ! initialized ) {
+      throw new IOException("Please initialize first");
     }
+  }
 
 }
