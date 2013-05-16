@@ -373,7 +373,7 @@ public class HRegion implements HeapSize { // , Writable{
     String encodedNameStr = this.regionInfo.getEncodedName();
     setHTableSpecificConf();
     this.regiondir = getRegionDir(this.tableDir, encodedNameStr);
-    this.isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
+    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
     if (isBkWalEnabled) {
       if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
                           HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
@@ -3274,6 +3274,8 @@ public class HRegion implements HeapSize { // , Writable{
     FileSystem fs = FileSystem.get(conf);
     fs.mkdirs(regionDir);
     HLog effectiveHLog = hlog;
+    // Initialization must happen here, not in constructor (which is just for tests)
+    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); // BREADCRUMB (Fran): Change HLog constructor to use URI
     if (hlog == null) {
       if (isBkWalEnabled) { // BREADCRUMB (Fran): Change HLog constructor to use URI
         if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
