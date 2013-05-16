@@ -629,7 +629,18 @@ public class HLog implements Syncable {
             i.logRolled(newPath);
           }
         }
-      } // Do nothing on the else part for BK
+      } else {
+        if (HLog.isDummyUri(newUri)) {
+          for(byte[] key : regionWriters.keySet() ) { // Remove and close all writers
+            Writer writer = regionWriters.remove(key);
+            writer.close();
+          }
+        } else if (HLog.isBookKeeperUri(newUri)){ // FIXME (Fran) Do rolling writers on BK (similar to dummy)
+           
+        } else {
+            // ERROR
+        }
+      }
 
       synchronized (updateLock) {
         if (closed) {
