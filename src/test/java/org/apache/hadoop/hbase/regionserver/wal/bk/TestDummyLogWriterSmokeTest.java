@@ -3,6 +3,7 @@ package org.apache.hadoop.hbase.regionserver.wal.bk;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -180,6 +181,68 @@ public class TestDummyLogWriterSmokeTest {
     // Finally assert that the two files where log is stored are different for each region
     String msg = "Expected <" + region1Uri + "> to be unequal to <" + region2Uri +">";
     assertFalse(msg, region1Uri.equals(region2Uri));
+  }
+  
+  @Test
+  public void testThatWhenRollingAWriterEachWriterCreatesADifferentLogFileAndContainTheRightEntries() throws Exception {
+    byte[] tableName = "testInitHRegionTable".getBytes();
+    byte[] colFam = "DummyFamily".getBytes();
+    byte[] col = "DummyCol".getBytes();
+    HTableDescriptor htd = new HTableDescriptor(tableName);
+    htd.addFamily(new HColumnDescriptor(colFam));
+
+    HRegionInfo hRegionInfo = new HRegionInfo(htd.getName(),
+                                               null /*startKey*/,
+                                               null /*stopKey*/,
+                                               false, (long)new String(tableName).hashCode());
+    HRegion hRegion = HRegion.createHRegion(hRegionInfo, new Path(conf.get(HConstants.HBASE_DIR)), conf, htd);
+    long walStartSeqNoRegion = hRegion.getLog().getSequenceNumber() + 1;
+    
+    Put p1 = new Put(Bytes.toBytes("foobar-1"));
+    p1.add(colFam, col, Bytes.toBytes("Value-test"));
+    hRegion.put(p1);
+    
+    Put p2 = new Put(Bytes.toBytes("foobar-10"));
+    p2.add(colFam, col, Bytes.toBytes("Value-test"));
+    hRegion.put(p2);
+
+    // Construct the log file URI where the writer has put the entries
+    URI regionUriBeforeRolling = URI.create("dummy://"
+                                + new String(hRegionInfo.getTableName(), Charsets.UTF_8)
+                                + "/" + hRegionInfo.getEncodedName()
+                                + "/" + walStartSeqNoRegion);
+    
+    // Check there's a log writer associated to that URI
+    // and only two entries in the log file identified by the URI
+    Writer regionWriterBeforeWalRolling = DummyLogWriter.regionWriters.get(regionUriBeforeRolling);
+    assertNotNull(regionWriterBeforeWalRolling);
+    assertEquals(2, regionWriterBeforeWalRolling.getLength());
+    
+    // Roll Writer
+    hRegion.getLog().rollWriter(true);
+    
+    // Re-build the log file URI where the new writer is going to put the entries
+    long nextWalStartSeqNoRegion = walStartSeqNoRegion + regionWriterBeforeWalRolling.getLength();
+    URI regionUriAfterWalRolling = URI.create("dummy://"
+            + new String(hRegionInfo.getTableName(), Charsets.UTF_8)
+            + "/" + hRegionInfo.getEncodedName()
+            + "/" + nextWalStartSeqNoRegion);
+    
+    // Check there's still no log writer before writing stuff to the region
+    Writer regionWriterAfterWalRolling = DummyLogWriter.regionWriters.get(regionUriAfterWalRolling);
+    assertNull(regionWriterAfterWalRolling);
+    
+    // Write an entry and check there's log writer and only one entry in the log
+    Put p3 = new Put(Bytes.toBytes("foobar-11"));
+    p3.add(colFam, col, Bytes.toBytes("Value-test"));
+    hRegion.put(p3);
+    regionWriterAfterWalRolling = DummyLogWriter.regionWriters.get(regionUriAfterWalRolling);
+    assertNotNull(regionWriterAfterWalRolling);
+    assertEquals(1, regionWriterAfterWalRolling.getLength());
+
+    // Finally assert that the two files where log is stored are different after rolling
+    String msg = "Expected <" + regionUriBeforeRolling + "> to be unequal to <" + regionUriAfterWalRolling +">";
+    assertFalse(msg, regionUriBeforeRolling.equals(regionUriAfterWalRolling));
   }
   
   /** Utility methods **/
