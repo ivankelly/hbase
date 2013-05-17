@@ -160,7 +160,7 @@ public class TestReplicationSourceManager {
 
     List<WALActionsListener> listeners = new ArrayList<WALActionsListener>();
     listeners.add(replication);
-    HLog hlog = new HLog(fs, logDir, oldLogDir, conf, listeners,
+    HLog hlog = new HLog(fs, logDir.toUri(), oldLogDir.toUri(), conf, listeners, // BREADCRUMB (Fran): Change HLog constructor to use URI
       URLEncoder.encode("regionserver:60020", "UTF8"));
 
     manager.init();

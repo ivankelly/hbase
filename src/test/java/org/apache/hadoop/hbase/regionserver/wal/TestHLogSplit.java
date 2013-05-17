@@ -847,7 +847,7 @@ public class TestHLogSplit {
       byte [] tableName = Bytes.toBytes(this.getClass().getName());
       HRegionInfo regioninfo = new HRegionInfo(tableName,
           HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
-      log = new HLog(fs, thisTestsDir, oldLogDir, conf);
+      log = new HLog(fs, thisTestsDir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
       final int total = 20;
       for (int i = 0; i < total; i++) {
         WALEdit kvs = new WALEdit();

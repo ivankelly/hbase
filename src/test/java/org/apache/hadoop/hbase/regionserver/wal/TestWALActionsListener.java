@@ -83,7 +83,7 @@ public class TestWALActionsListener {
     List<WALActionsListener> list = new ArrayList<WALActionsListener>();
     list.add(observer);
     DummyWALActionsListener laterobserver = new DummyWALActionsListener();
-    HLog hlog = new HLog(fs, logDir, oldLogDir, conf, list, null);
+    HLog hlog = new HLog(fs, logDir.toUri(), oldLogDir.toUri(), conf, list, null); // BREADCRUMB (Fran): Change HLog constructor to use URI
     HRegionInfo hri = new HRegionInfo(SOME_BYTES,
              SOME_BYTES, SOME_BYTES, false);
 

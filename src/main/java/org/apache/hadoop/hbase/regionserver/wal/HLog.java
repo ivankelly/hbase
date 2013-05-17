@@ -40,6 +40,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,6 +72,8 @@ import org.apache.hadoop.hbase.util.HasThread;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.StringUtils;
+
+import com.google.common.base.Charsets;
 
 import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
 import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
@@ -181,6 +184,7 @@ public class HLog implements Syncable {
    * Current log file.
    */
   Writer writer;
+  ConcurrentHashMap<byte[], Writer> regionWriters = new ConcurrentHashMap<byte[], Writer>(); //BREADCRUMB (Fran): Perform WAL writing depending on the URI 
 
   /*
    * Map of all log files but the current one.
@@ -312,15 +316,15 @@ public class HLog implements Syncable {
    * Constructor.
    *
    * @param fs filesystem handle
-   * @param dir path to where hlogs are stored
-   * @param oldLogDir path to where hlogs are archived
+   * @param dirUri path as URI to where hlogs are stored
+   * @param oldLogDirUri path as URI to where hlogs are archived
    * @param conf configuration to use
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
+  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri,
               final Configuration conf)
   throws IOException {
-    this(fs, dir, oldLogDir, conf, null, true, null);
+    this(fs, dirUri, oldLogDirUri, conf, null, true, null);
   }
 
   /**
@@ -331,8 +335,8 @@ public class HLog implements Syncable {
    * HLog object is started up.
    *
    * @param fs filesystem handle
-   * @param dir path to where hlogs are stored
-   * @param oldLogDir path to where hlogs are archived
+   * @param dirUri path as URI to where hlogs are stored
+   * @param oldLogDirUri path as URI to where hlogs are archived
    * @param conf configuration to use
    * @param listeners Listeners on WAL events. Listeners passed here will
    * be registered before we do anything else; e.g. the
@@ -342,10 +346,10 @@ public class HLog implements Syncable {
    *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
+  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
       final Configuration conf, final List<WALActionsListener> listeners,
       final String prefix) throws IOException {
-    this(fs, dir, oldLogDir, conf, listeners, true, prefix);
+    this(fs, dirUri, oldLogDirUri, conf, listeners, true, prefix);
   }
 
   /**
@@ -356,8 +360,7 @@ public class HLog implements Syncable {
    * HLog object is started up.
    *
    * @param fs filesystem handle
-   * @param dir path to where hlogs are stored
-   * @param oldLogDir path to where hlogs are archived
+   * @param dirUri path as URI to where hlogs are stored
    * @param conf configuration to use
    * @param listeners Listeners on WAL events. Listeners passed here will
    * be registered before we do anything else; e.g. the
@@ -368,14 +371,14 @@ public class HLog implements Syncable {
    *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
+  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
       final Configuration conf, final List<WALActionsListener> listeners,
       final boolean failIfLogDirExists, final String prefix)
   throws IOException {
     super();
     this.fs = fs;
-    this.dirUri = dir.toUri(); // BREADCRUMB (Fran): This mimics dir but as URI
-    this.oldLogDirUri = oldLogDir.toUri(); // BREADCRUMB (Fran): Remove oldLogDir as Path
+    this.dirUri = dirUri; // BREADCRUMB (Fran): This mimics dir but as URI  BREADCRUMB (Fran): Change HLog constructor to use URI
+    this.oldLogDirUri = oldLogDirUri; // BREADCRUMB (Fran): Remove oldLogDir as Path BREADCRUMB (Fran): Change HLog constructor to use URI
     this.conf = conf;
     if (listeners != null) {
       for (WALActionsListener i: listeners) {
@@ -383,8 +386,10 @@ public class HLog implements Syncable {
       }
     }
     // BREADCRUMB (Fran): Remove dir as Path
-    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); 
+    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
     if(!isBkWalEnabled) {
+      Path dir = new Path(this.dirUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
+      Path oldLogDir = new Path(this.oldLogDirUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
       this.blocksize = conf.getLong("hbase.regionserver.hlog.blocksize",
           getDefaultBlockSize(dir));
       // Roll at 95% of block size.
@@ -624,7 +629,18 @@ public class HLog implements Syncable {
             i.logRolled(newPath);
           }
         }
-      } // Do nothing on the else part for BK
+      } else {
+        if (HLog.isDummyUri(newUri)) {
+          for(byte[] key : regionWriters.keySet() ) { // Remove and close all writers
+            Writer writer = regionWriters.remove(key);
+            writer.close();
+          }
+        } else if (HLog.isBookKeeperUri(newUri)){ // FIXME (Fran) Do rolling writers on BK (similar to dummy)
+           
+        } else {
+            // ERROR
+        }
+      }
 
       synchronized (updateLock) {
         if (closed) {
@@ -1376,7 +1392,28 @@ public class HLog implements Syncable {
       // coprocessor hook:
       if (!coprocessorHost.preWALWrite(info, logKey, logEdit)) {
         // if not bypassed:
-        this.writer.append(new HLog.Entry(logKey, logEdit));
+        LOG.info(dirUri);
+        if (HLog.isHdfsUri(dirUri)) { // BREADCRUMB (Fran): Perform WAL writing depending on the URI 
+          this.writer.append(new HLog.Entry(logKey, logEdit));
+        } else if (HLog.isDummyUri(dirUri)) {
+          byte [] encodedRegionName = info.getEncodedNameAsBytes();
+          Writer writer = regionWriters.get(encodedRegionName);
+          if(writer == null) {
+            // Create the right URI to Writer instance using logKey.getLogSeqNum()
+            URI walUri = URI.create("dummy://"
+                             + new String(info.getTableName(), Charsets.UTF_8)
+                             + "/" + info.getEncodedName()
+                             + "/" + logKey.getLogSeqNum());
+            Writer newWriter = this.createWriterInstance(fs, walUri, conf);
+            writer = regionWriters.putIfAbsent(encodedRegionName, newWriter);
+            if (writer == null) {
+              writer = newWriter;
+            }
+          }
+          writer.append(new HLog.Entry(logKey, logEdit));
+        } else { // FIXME (Fran): Perform the actions for BK logging
+          LOG.info("BK logging!!!");
+        }          
       }
       long took = System.currentTimeMillis() - now;
       coprocessorHost.postWALWrite(info, logKey, logEdit);

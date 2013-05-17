@@ -373,7 +373,7 @@ public class HRegion implements HeapSize { // , Writable{
     String encodedNameStr = this.regionInfo.getEncodedName();
     setHTableSpecificConf();
     this.regiondir = getRegionDir(this.tableDir, encodedNameStr);
-    this.isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
+    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
     if (isBkWalEnabled) {
       if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
                           HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
@@ -3274,9 +3274,29 @@ public class HRegion implements HeapSize { // , Writable{
     FileSystem fs = FileSystem.get(conf);
     fs.mkdirs(regionDir);
     HLog effectiveHLog = hlog;
+    // Initialization must happen here, not in constructor (which is just for tests)
+    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); // BREADCRUMB (Fran): Change HLog constructor to use URI
     if (hlog == null) {
-      effectiveHLog = new HLog(fs, new Path(regionDir, HConstants.HREGION_LOGDIR_NAME),
-          new Path(regionDir, HConstants.HREGION_OLDLOGDIR_NAME), conf);
+      if (isBkWalEnabled) { // BREADCRUMB (Fran): Change HLog constructor to use URI
+        if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
+                            HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
+          URI regionWalDirUri = URI.create("dummy://"
+                              + new String(info.getTableName(), Charsets.UTF_8)
+                              + "/" + info.getEncodedName()
+                              + "/" + HConstants.HREGION_LOGDIR_NAME);
+          URI regionWalOldDirUri = URI.create("dummy://"
+                  + new String(info.getTableName(), Charsets.UTF_8)
+                  + "/" + info.getEncodedName()
+                  + "/" + HConstants.HREGION_OLDLOGDIR_NAME);
+          effectiveHLog = new HLog(fs, regionWalDirUri, regionWalOldDirUri, conf);
+        } else {
+          effectiveHLog = new HLog(fs, URI.create("bk://blah/foobar/fixme"), // FIXME (Fran): Create proper URIs for BK
+                  URI.create("bk://blah/foobar/fixme"), conf);
+        }
+      } else {
+        effectiveHLog = new HLog(fs, new Path(regionDir, HConstants.HREGION_LOGDIR_NAME).toUri(), // BREADCRUMB (Fran): Change HLog constructor to use URI
+                new Path(regionDir, HConstants.HREGION_OLDLOGDIR_NAME).toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
+      }
     }
     HRegion region = HRegion.newHRegion(tableDir,
         effectiveHLog, fs, conf, info, hTableDescriptor, null);
@@ -4497,7 +4517,7 @@ public class HRegion implements HeapSize { // , Writable{
         + EnvironmentEdgeManager.currentTimeMillis());
     final Path oldLogDir = new Path(c.get("hbase.tmp.dir"),
         HConstants.HREGION_OLDLOGDIR_NAME);
-    final HLog log = new HLog(fs, logdir, oldLogDir, c);
+    final HLog log = new HLog(fs, logdir.toUri(), oldLogDir.toUri(), c); // BREADCRUMB (Fran): Change HLog constructor to use URI
     try {
       processTable(fs, tableDir, log, c, majorCompact);
      } finally {

@@ -156,7 +156,7 @@ class HMerge {
       Path logdir = new Path(tabledir, "merge_" + System.currentTimeMillis() +
           HConstants.HREGION_LOGDIR_NAME);
       Path oldLogDir = new Path(tabledir, HConstants.HREGION_OLDLOGDIR_NAME);
-      this.hlog = new HLog(fs, logdir, oldLogDir, conf);
+      this.hlog = new HLog(fs, logdir.toUri(), oldLogDir.toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
     }
 
     void process() throws IOException {
