@@ -1844,6 +1844,7 @@
 		<include>**/TestLogRoll*.java</include>
 		<include>**/TestHRegion.java</include>
 		<include>**/TestLocalHBaseCluster.java</include>
+		<include>**/bk/*.java</include>
               </includes>
             </configuration>
           </plugin>

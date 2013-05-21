@@ -40,7 +40,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -72,8 +71,6 @@ import org.apache.hadoop.hbase.util.HasThread;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.StringUtils;
-
-import com.google.common.base.Charsets;
 
 import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
 import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
@@ -184,7 +181,6 @@ public class HLog implements Syncable {
    * Current log file.
    */
   Writer writer;
-  ConcurrentHashMap<byte[], Writer> regionWriters = new ConcurrentHashMap<byte[], Writer>(); //BREADCRUMB (Fran): Perform WAL writing depending on the URI 
 
   /*
    * Map of all log files but the current one.
@@ -608,17 +604,18 @@ public class HLog implements Syncable {
     this.cacheFlushLock.lock();
     this.logRollRunning = true;
     try {
-      // Do all the preparation outside of the updateLock to block
-      // as less as possible the incoming writes
-      long currentFilenum = this.filenum;
-      this.filenum = System.currentTimeMillis();
-      URI newUri = computeFilename(); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
-      HLog.Writer nextWriter = this.createWriterInstance(fs, newUri, conf);
-      // Can we get at the dfsclient outputstream?  If an instance of
-      // SFLW, it'll have done the necessary reflection to get at the
-      // protected field name.
-      FSDataOutputStream nextHdfsOut = null;
-      if (!isBkWalEnabled) { // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+      if (HLog.isHdfsUri(dirUri)) { // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+        // Do all the preparation outside of the updateLock to block
+        // as less as possible the incoming writes
+        long currentFilenum = this.filenum;
+        this.filenum = System.currentTimeMillis();
+        URI newUri = computeFilename(); // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+        HLog.Writer nextWriter = this.createWriterInstance(fs, newUri, conf);
+        // Can we get at the dfsclient outputstream?  If an instance of
+        // SFLW, it'll have done the necessary reflection to get at the
+        // protected field name.
+        FSDataOutputStream nextHdfsOut = null;
+
         if (nextWriter instanceof SequenceFileLogWriter) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
           nextHdfsOut = ((SequenceFileLogWriter)nextWriter).getWriterFSDataOutputStream();
         }      
@@ -629,48 +626,40 @@ public class HLog implements Syncable {
             i.logRolled(newPath);
           }
         }
-      } else {
-        if (HLog.isDummyUri(newUri)) {
-          for(byte[] key : regionWriters.keySet() ) { // Remove and close all writers
-            Writer writer = regionWriters.remove(key);
-            writer.close();
-          }
-        } else if (HLog.isBookKeeperUri(newUri)){ // FIXME (Fran) Do rolling writers on BK (similar to dummy)
-           
-        } else {
-            // ERROR
-        }
-      }
 
-      synchronized (updateLock) {
-        if (closed) {
-          LOG.debug("HLog closed.  Skipping rolling of writer");
-          nextWriter.close(); // creates empty log file
-          return regionsToFlush;
-        }
-        // Clean up current writer.
-        URI oldFileUri = cleanupCurrentWriter(currentFilenum); // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
-        this.writer = nextWriter;
-        if(!isBkWalEnabled) { // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
+        synchronized (updateLock) {
+          if (closed) {
+            LOG.debug("HLog closed.  Skipping rolling of writer");
+            nextWriter.close(); // creates empty log file
+            return regionsToFlush;
+          }
+          // Clean up current writer.
+          URI oldFileUri = cleanupCurrentWriter(currentFilenum); // BREADCRUMB (Fran): cleanupCurrentWriter() now returns a URI instead of Path
+          this.writer = nextWriter;
           this.hdfs_out = nextHdfsOut; // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
           if ((oldFileUri != null) && (newUri != null)) {
             Path oldFile = new Path(oldFileUri);
-            Path newPath = new Path(newUri);
             LOG.info("Roll " + FSUtils.getPath(oldFile) + ", entries=" +
                      this.numEntries.get() +
                      ", filesize=" +
                      this.fs.getFileStatus(oldFile).getLen() + ". " +
                      " for " + FSUtils.getPath(newPath));
           }
-        } else {
-          if ((oldFileUri != null) && (newUri != null)) {
-           // TODO (Fran): The BK message lacks "filesize". Add it if required in the future
-            LOG.info("Roll " + oldFileUri.getPath() + ", entries=" +
-                    this.numEntries.get() + ". " + " for " + newUri.getPath());
-          }
         }
-        this.numEntries.set(0);        
+      } else if (HLog.isDummyUri(dirUri)
+                 || HLog.isBookKeeperUri(dirUri)) {
+        if (this.writer != null) {
+          this.writer.close();
+        }
+        this.writer = null;
+
+        this.writer = new MultiplexWriter();
+        this.writer.init(fs, dirUri, conf);
+      } else {
+        LOG.error("Unknown dir URI" + dirUri);
       }
+
+      this.numEntries.set(0);
       // Can we delete any of the old log files?
       if (this.outputfiles.size() > 0) {
         if (this.lastSeqWritten.isEmpty()) {
@@ -1393,27 +1382,7 @@ public class HLog implements Syncable {
       if (!coprocessorHost.preWALWrite(info, logKey, logEdit)) {
         // if not bypassed:
         LOG.info(dirUri);
-        if (HLog.isHdfsUri(dirUri)) { // BREADCRUMB (Fran): Perform WAL writing depending on the URI 
-          this.writer.append(new HLog.Entry(logKey, logEdit));
-        } else if (HLog.isDummyUri(dirUri)) {
-          byte [] encodedRegionName = info.getEncodedNameAsBytes();
-          Writer writer = regionWriters.get(encodedRegionName);
-          if(writer == null) {
-            // Create the right URI to Writer instance using logKey.getLogSeqNum()
-            URI walUri = URI.create("dummy://"
-                             + new String(info.getTableName(), Charsets.UTF_8)
-                             + "/" + info.getEncodedName()
-                             + "/" + logKey.getLogSeqNum());
-            Writer newWriter = this.createWriterInstance(fs, walUri, conf);
-            writer = regionWriters.putIfAbsent(encodedRegionName, newWriter);
-            if (writer == null) {
-              writer = newWriter;
-            }
-          }
-          writer.append(new HLog.Entry(logKey, logEdit));
-        } else { // FIXME (Fran): Perform the actions for BK logging
-          LOG.info("BK logging!!!");
-        }          
+        this.writer.append(new HLog.Entry(logKey, logEdit));
       }
       long took = System.currentTimeMillis() - now;
       coprocessorHost.postWALWrite(info, logKey, logEdit);
@@ -1780,9 +1749,14 @@ public class HLog implements Syncable {
       }
     } else if (isDummyUri(regiondir)) {
       // Fixed set of logs for dummy
-      filesSorted.add(URI.create(regiondir.toString() + "/00001?keyprefix=foobar&count=10"));
-      filesSorted.add(URI.create(regiondir.toString() + "/00201?keyprefix=foobaz&count=100"));
-      filesSorted.add(URI.create(regiondir.toString() + "/00401?keyprefix=barfoo&count=1000"));
+      String[] parts = regiondir.getSchemeSpecificPart().replaceAll("^//", "").replaceAll("\\?.+$", "").split("/");
+      if (parts.length == 2
+          && !parts[0].equals(".META.")
+          && !parts[0].equals("-ROOT-")) {
+        filesSorted.add(URI.create(regiondir.toString() + "/00001?keyprefix=foobar&count=10"));
+        filesSorted.add(URI.create(regiondir.toString() + "/00201?keyprefix=foobaz&count=100"));
+        filesSorted.add(URI.create(regiondir.toString() + "/00401?keyprefix=barfoo&count=1000"));
+      }
     } else if (isBookKeeperUri(regiondir)) {
     }
     return filesSorted;
