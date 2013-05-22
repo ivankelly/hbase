@@ -45,13 +45,13 @@ public class DummyLogReader implements HLog.Reader {
       throw new IOException("Invalid uri scheme " + uri.getScheme());
     }
 
-    String[] parts = uri.getPath().split("/");
+    String[] parts = uri.getSchemeSpecificPart().replaceAll("^//", "").replaceAll("\\?.+$", "").split("/");
     if (parts.length != 3) {
       throw new IOException("URI format is "
-                            + "dummy://<table>/<region>/<sequence>?keyprefix=<prefix>&count=<count>"
+                            + "dummy:<table>/<region>/<sequence>?keyprefix=<prefix>&count=<count>"
                             + " parts.length = " + parts.length + ", path = " + uri.getPath());
     }
-    table = uri.getHost().getBytes();
+    table = parts[0].getBytes();
     region = parts[1].getBytes();
     seqid = Long.valueOf(parts[2]);
 
