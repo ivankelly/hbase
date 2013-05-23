@@ -38,8 +38,7 @@ public class TestDummyLogCluster {
     byte[] col = "DummyCol".getBytes();
 
     conf = HBaseConfiguration.addHbaseResources(conf);
-    conf.set(HConstants.HBASE_BK_WAL_ENABLED_KEY, "true");
-    conf.set(HConstants.HBASE_BK_WAL_DUMMY_KEY, "true"); // use the dummy implementation
+    conf.set(HConstants.HBASE_WAL_BASEURI, "dummy:test");
     conf.set("hbase.regionserver.hlog.reader.impl",
              "org.apache.hadoop.hbase.regionserver.wal.bk.DummyLogReader");
     conf.set("hbase.regionserver.hlog.writer.impl",

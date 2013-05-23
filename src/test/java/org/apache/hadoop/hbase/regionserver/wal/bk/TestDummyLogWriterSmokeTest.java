@@ -62,8 +62,8 @@ public class TestDummyLogWriterSmokeTest {
   @Before
   public void setUp() throws Exception {
     conf = HBaseConfiguration.create(TEST_UTIL.getConfiguration());
-    conf.set(HConstants.HBASE_BK_WAL_ENABLED_KEY, "true");
-    conf.set(HConstants.HBASE_BK_WAL_DUMMY_KEY, "true"); // use the dummy implementation
+    conf.set(HConstants.HBASE_WAL_BASEURI, "dummy:test");
+
     conf.set("hbase.regionserver.hlog.writer.impl",
              "org.apache.hadoop.hbase.regionserver.wal.bk.DummyLogWriter");
     conf.set("hbase.regionserver.hlog.reader.impl",
@@ -161,14 +161,14 @@ public class TestDummyLogWriterSmokeTest {
       hRegion2.put(p2r2); // Then write to the right one
     }
 
-    URI region1Uri = URI.create("dummy://"
-                                + new String(hRegionInfo1.getTableName(), Charsets.UTF_8)
-                                + "/" + hRegionInfo1.getEncodedName()
-                                + "/" + walStartSeqNoRegion1);
-    URI region2Uri = URI.create("dummy://"
-                                + new String(hRegionInfo2.getTableName(), Charsets.UTF_8)
-                                + "/" + hRegionInfo2.getEncodedName()
-                                + "/" + walStartSeqNoRegion2);
+    URI region1Uri = BookKeeperHLogHelper.logUriFromBase(
+        URI.create(conf.get(HConstants.HBASE_WAL_BASEURI)),
+        new String(hRegionInfo1.getTableName(), Charsets.UTF_8),
+        hRegionInfo1.getEncodedName(), walStartSeqNoRegion1);
+    URI region2Uri = BookKeeperHLogHelper.logUriFromBase(
+        URI.create(conf.get(HConstants.HBASE_WAL_BASEURI)),
+        new String(hRegionInfo2.getTableName(), Charsets.UTF_8),
+        hRegionInfo2.getEncodedName(), walStartSeqNoRegion2);
     
     // Assert, per each region that the amount of stuff written by each 
     // DummyWriter is equal to what be have written above
@@ -207,10 +207,10 @@ public class TestDummyLogWriterSmokeTest {
     hRegion.put(p2);
 
     // Construct the log file URI where the writer has put the entries
-    URI regionUriBeforeRolling = URI.create("dummy://"
-                                + new String(hRegionInfo.getTableName(), Charsets.UTF_8)
-                                + "/" + hRegionInfo.getEncodedName()
-                                + "/" + walStartSeqNoRegion);
+    URI regionUriBeforeRolling = BookKeeperHLogHelper.logUriFromBase(
+        URI.create(conf.get(HConstants.HBASE_WAL_BASEURI)),
+        new String(hRegionInfo.getTableName(), Charsets.UTF_8),
+        hRegionInfo.getEncodedName(), walStartSeqNoRegion);
     
     // Check there's a log writer associated to that URI
     // and only two entries in the log file identified by the URI
@@ -223,10 +223,10 @@ public class TestDummyLogWriterSmokeTest {
     
     // Re-build the log file URI where the new writer is going to put the entries
     long nextWalStartSeqNoRegion = walStartSeqNoRegion + regionWriterBeforeWalRolling.getLength();
-    URI regionUriAfterWalRolling = URI.create("dummy://"
-            + new String(hRegionInfo.getTableName(), Charsets.UTF_8)
-            + "/" + hRegionInfo.getEncodedName()
-            + "/" + nextWalStartSeqNoRegion);
+    URI regionUriAfterWalRolling = BookKeeperHLogHelper.logUriFromBase(
+        URI.create(conf.get(HConstants.HBASE_WAL_BASEURI)),
+        new String(hRegionInfo.getTableName(), Charsets.UTF_8),
+        hRegionInfo.getEncodedName(), nextWalStartSeqNoRegion);
     
     // Check there's still no log writer before writing stuff to the region
     Writer regionWriterAfterWalRolling = DummyLogWriter.regionWriters.get(regionUriAfterWalRolling);

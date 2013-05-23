@@ -59,8 +59,7 @@ public class TestDummyLogReaderSmokeTest {
   @Before
   public void setUp() throws Exception {
     conf = HBaseConfiguration.create(TEST_UTIL.getConfiguration());
-    conf.set(HConstants.HBASE_BK_WAL_ENABLED_KEY, "true");
-    conf.set(HConstants.HBASE_BK_WAL_DUMMY_KEY, "true"); // use the dummy implementation
+    conf.set(HConstants.HBASE_WAL_BASEURI, "dummy:test");
 
     FileSystem fs = TEST_UTIL.getDFSCluster().getFileSystem();
     Path hbaseRootDir = new Path(conf.get(HConstants.HBASE_DIR));
@@ -96,7 +95,7 @@ public class TestDummyLogReaderSmokeTest {
   public void testInitLogReader() throws Exception {
     FileSystem fs = FileSystem.get(conf);
     HLog.Reader reader = HLog.getReader(fs,
-        URI.create("dummy://table1/region2/00001?keyprefix=keya&count=10"), conf);
+        URI.create("dummy:test/t:table1/r:region2/00001?keyprefix=keya&count=10"), conf);
     for (int i = 1; i <= 10; i++) {
       Entry e = reader.next();
       assertNotNull("entry shouldn't be null", e);

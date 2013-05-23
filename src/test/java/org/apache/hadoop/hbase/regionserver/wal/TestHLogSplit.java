@@ -1135,7 +1135,7 @@ public class TestHLogSplit {
         // After creating writer, simulate region's
         // replayRecoveredEditsIfAny() which gets SplitEditFiles of this
         // region and delete them, excluding files with '.temp' suffix.
-        NavigableSet<URI> files = HLog.getSplitEditFilesSorted(this.fs, // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+        NavigableSet<URI> files = HLog.getSplitEditFilesSorted(conf, this.fs,
             regiondir.toUri());
         if (files != null && !files.isEmpty()) {
           for (URI file : files) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
