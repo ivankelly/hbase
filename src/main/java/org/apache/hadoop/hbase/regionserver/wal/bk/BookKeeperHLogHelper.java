@@ -23,6 +23,16 @@ import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Charsets;
+import com.google.protobuf.TextFormat;
+
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.ZooDefs.Ids;
+import org.apache.zookeeper.data.Stat;
+import org.apache.hadoop.hbase.regionserver.wal.bk.BKWalFormats.RegionLog;
+import org.apache.hadoop.hbase.regionserver.wal.bk.BKWalFormats.RegionLogs;
+
 import org.apache.hadoop.hbase.zookeeper.RecoverableZooKeeper;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.zookeeper.Watcher;
@@ -32,6 +42,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import org.apache.hadoop.conf.Configuration;
+import java.util.TreeSet;
 import java.util.NavigableSet;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
@@ -42,7 +53,14 @@ public class BookKeeperHLogHelper {
 
   private static RecoverableZooKeeper zk = null;
 
-  synchronized RecoverableZooKeeper getZK(Configuration conf)
+  public synchronized static void reset() throws InterruptedException {
+    if (zk != null) {
+      zk.close();
+    }
+    zk = null;
+  }
+
+  synchronized static RecoverableZooKeeper getZK(Configuration conf)
       throws IOException {
     try {
       if (zk == null) {
@@ -111,7 +129,7 @@ public class BookKeeperHLogHelper {
     if (!base.endsWith("/")) {
       base = base + "/";
     }
-    return String.format("%s/t:%s/r:%s", base, table, region);
+    return String.format("%st:%s/r:%s", base, table, region);
   }
 
   public static URI regionUriFromBase(URI base, String table, String region) {
@@ -130,10 +148,96 @@ public class BookKeeperHLogHelper {
     return URI.create(logUriFromRegionUri(regionUri, seqNum).toString() + QS);
   }
 
+  static String znodeForRegionLogs(URI regionLogsURI) throws IOException {
+    Pattern p = Pattern.compile("bookkeeper:(.*/t:[^/]+/r:[^/]+)(/(\\d*))?");
+    Matcher m = p.matcher(regionLogsURI.toString());
+    if (!m.find()) {
+      throw new IOException("Couldn't get znode for " + regionLogsURI.toString());
+    }
+    return m.group(1);
+  }
+
+  private static RegionLogs.Builder getLogsBuilder(Configuration conf, URI regionLogUri)
+      throws IOException {
+    String znode = znodeForRegionLogs(regionLogUri);
+    Stat s = ensureExists(conf, znode);
+    RecoverableZooKeeper zk = getZK(conf);
+
+    RegionLogs.Builder logsBuilder = RegionLogs.newBuilder();
+    try {
+      byte[] data = zk.getData(znode, false, s);
+      if (data.length > 0) {
+        TextFormat.merge(new String(data, Charsets.UTF_8), logsBuilder);
+      }
+      return logsBuilder;
+    } catch (KeeperException ke) {
+      throw new IOException("Couldn't read logs from zk", ke);
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+      throw new IOException("Interrupted reading logs", ie);
+    }
+  }
+
+  public static long getLedgerIdForURI(Configuration conf, URI regionLogUri) throws IOException{
+    Pattern p = Pattern.compile("bookkeeper:.*/t:[^/]+/r:[^/]+/(\\d*)");
+    Matcher m = p.matcher(regionLogUri.toString());
+    if (!m.find()) {
+      throw new IOException("Doesn't specify a log " + regionLogUri.toString());
+    }
+    long seqNum = Long.valueOf(m.group(1));
+
+    RegionLogs logs = getLogsBuilder(conf, regionLogUri).build();
+
+    for (RegionLog l : logs.getLogList()) {
+      if (l.getSeqNum() == seqNum) {
+        return l.getLedgerId();
+      }
+    }
+    throw new IOException("No ledger found for seqNum " + seqNum);
+  }
+
   public static NavigableSet<URI> listLogs(Configuration conf, URI regionlogsURI)
       throws IOException {
-    
-    return null;
+    String znode = znodeForRegionLogs(regionlogsURI);
+    Stat s = ensureExists(conf, znode);
+
+    TreeSet<URI> uris = new TreeSet<URI>();
+    RegionLogs logs = getLogsBuilder(conf, regionlogsURI).build();
+
+    for (RegionLog l : logs.getLogList()) {
+      uris.add(logUriFromRegionUri(regionlogsURI, l.getSeqNum()));
+    }
+    LatestRegionZNodeVersion.update(regionlogsURI, s.getVersion());
+
+    return uris;
+  }
+
+  public static void addLogForRegion(Configuration conf, URI regionlogsURI,
+                                     long seqNum, long ledgerId) throws IOException {
+    String znode = znodeForRegionLogs(regionlogsURI);
+    Stat s = ensureExists(conf, znode);
+    RecoverableZooKeeper zk = getZK(conf);
+
+    Long lastVersion = LatestRegionZNodeVersion.get(regionlogsURI);
+    if (lastVersion != null
+        && lastVersion != s.getVersion()) {
+      throw new IOException("Not every entry has been applied, can't add more");
+    }
+
+    RegionLogs.Builder logsBuilder = getLogsBuilder(conf, regionlogsURI);
+
+    logsBuilder.addLog(RegionLog.newBuilder()
+        .setSeqNum(seqNum).setLedgerId(ledgerId).build());
+    try {
+      s = zk.setData(znode, TextFormat.printToString(logsBuilder.build())
+                          .getBytes(Charsets.UTF_8), s.getVersion());
+      LatestRegionZNodeVersion.update(regionlogsURI, s.getVersion());
+    } catch (KeeperException ke) {
+      throw new IOException("Couldn't update logs to zk", ke);
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+      throw new IOException("Interrupted writing logs", ie);
+    }
   }
 
   static class BKHLogWatcher implements Watcher {
@@ -180,6 +284,37 @@ public class BookKeeperHLogHelper {
         }
         break;
       }
+    }
+  }
+
+  /**
+   * Ensure that a path exists.
+   * @return the znode version
+   */
+  private static Stat ensureExists(Configuration conf, String path) throws IOException {
+    RecoverableZooKeeper zk = getZK(conf);
+    if (path.equals("") || path.equals("/")) {
+      return null;
+    }
+    try {
+      Stat s = zk.exists(path, false);
+      if (s != null) {
+        return s;
+      }
+
+      String parent = path.replaceAll("/[^/]*$", "");
+      ensureExists(conf, parent);
+      try {
+        zk.create(path, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+      } catch (KeeperException.NodeExistsException nee) {
+        // ignore
+      }
+      return zk.exists(path, false);
+    } catch (KeeperException ke) {
+      throw new IOException("Could not create " + path);
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+      throw new IOException("Interrupted while creating " + path);
     }
   }
 }

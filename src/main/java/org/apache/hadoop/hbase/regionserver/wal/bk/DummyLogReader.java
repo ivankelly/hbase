@@ -28,7 +28,7 @@ public class DummyLogReader implements HLog.Reader {
 
   private static final String PWD = "pwd";
 
-  private String keyprefix = "";
+  private String keyprefix = "default-";
   private long read = 0;
   private long count = 100;
   private long seqid = 0;
@@ -43,7 +43,7 @@ public class DummyLogReader implements HLog.Reader {
   @Override
   public void init(FileSystem fs, URI uri, Configuration c)
     throws IOException {
-    if (!uri.getScheme().equals("dummy")) {
+    if (!uri.getScheme().equals("dummy") && !uri.getScheme().equals("bookkeeper")) {
       throw new IOException("Invalid uri scheme " + uri.getScheme());
     }
 
