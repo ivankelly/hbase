@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Writer;
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Entry;
+import org.apache.hadoop.hbase.regionserver.wal.bk.BookKeeperHLogHelper;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.net.URI;
@@ -62,10 +63,10 @@ public class MultiplexWriter implements Writer {
     Writer writer = regionWriters.get(region);
     if(writer == null) {
       // Create the right URI to Writer instance using logKey.getLogSeqNum()
-      URI walUri = URI.create("dummy://"
-                              + new String(entry.getKey().getTablename(), Charsets.UTF_8)
-                              + "/" + region
-                              + "/" + entry.getKey().getLogSeqNum());
+      URI walUri = BookKeeperHLogHelper.logUriFromBase(baseUri,
+          new String(entry.getKey().getTablename(), Charsets.UTF_8),
+          region, entry.getKey().getLogSeqNum());
+
       Writer newWriter = HLog.createWriter(fs, walUri, conf);
       writer = regionWriters.putIfAbsent(region, newWriter);
       if (writer == null) {

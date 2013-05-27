@@ -64,6 +64,7 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.regionserver.wal.bk.BookKeeperHLogHelper;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.ClassSize;
 import org.apache.hadoop.hbase.util.FSUtils;
@@ -71,9 +72,6 @@ import org.apache.hadoop.hbase.util.HasThread;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.StringUtils;
-
-import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
-import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
 
 /**
  * HLog stores all the edits to the HStore.  Its the hbase write-ahead-log
@@ -133,7 +131,7 @@ public class HLog implements Syncable {
   static final String RECOVERED_LOG_TMPFILE_SUFFIX = ".temp";
   
   private final FileSystem fs;
-  private final URI dirUri; // BREADCRUMB (Fran): This mimics dir but as URI
+  private final URI baseUri; // BREADCRUMB (Fran): This mimics dir but as URI
   private final Configuration conf;
   // Listeners that are called on WAL events.
   private List<WALActionsListener> listeners =
@@ -306,8 +304,6 @@ public class HLog implements Syncable {
     return ret;
   }
 
-  private static boolean isBkWalEnabled; // BREADCRUMB (Fran): Switch to select between Wal implementations
-  
   /**
    * Constructor.
    *
@@ -317,10 +313,10 @@ public class HLog implements Syncable {
    * @param conf configuration to use
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri,
+  public HLog(final FileSystem fs, final URI baseUri, final URI oldLogDirUri,
               final Configuration conf)
   throws IOException {
-    this(fs, dirUri, oldLogDirUri, conf, null, true, null);
+    this(fs, baseUri, oldLogDirUri, conf, null, true, null);
   }
 
   /**
@@ -331,7 +327,7 @@ public class HLog implements Syncable {
    * HLog object is started up.
    *
    * @param fs filesystem handle
-   * @param dirUri path as URI to where hlogs are stored
+   * @param baseUri path as URI to where hlogs are stored
    * @param oldLogDirUri path as URI to where hlogs are archived
    * @param conf configuration to use
    * @param listeners Listeners on WAL events. Listeners passed here will
@@ -342,10 +338,10 @@ public class HLog implements Syncable {
    *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
+  public HLog(final FileSystem fs, final URI baseUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
       final Configuration conf, final List<WALActionsListener> listeners,
       final String prefix) throws IOException {
-    this(fs, dirUri, oldLogDirUri, conf, listeners, true, prefix);
+    this(fs, baseUri, oldLogDirUri, conf, listeners, true, prefix);
   }
 
   /**
@@ -356,7 +352,7 @@ public class HLog implements Syncable {
    * HLog object is started up.
    *
    * @param fs filesystem handle
-   * @param dirUri path as URI to where hlogs are stored
+   * @param baseUri path as URI to where hlogs are stored
    * @param conf configuration to use
    * @param listeners Listeners on WAL events. Listeners passed here will
    * be registered before we do anything else; e.g. the
@@ -367,13 +363,13 @@ public class HLog implements Syncable {
    *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
-  public HLog(final FileSystem fs, final URI dirUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
+  public HLog(final FileSystem fs, final URI baseUri, final URI oldLogDirUri, // BREADCRUMB (Fran): Change HLog constructor to use URI
       final Configuration conf, final List<WALActionsListener> listeners,
       final boolean failIfLogDirExists, final String prefix)
   throws IOException {
     super();
     this.fs = fs;
-    this.dirUri = dirUri; // BREADCRUMB (Fran): This mimics dir but as URI  BREADCRUMB (Fran): Change HLog constructor to use URI
+    this.baseUri = baseUri; // BREADCRUMB (Fran): This mimics dir but as URI  BREADCRUMB (Fran): Change HLog constructor to use URI
     this.oldLogDirUri = oldLogDirUri; // BREADCRUMB (Fran): Remove oldLogDir as Path BREADCRUMB (Fran): Change HLog constructor to use URI
     this.conf = conf;
     if (listeners != null) {
@@ -382,9 +378,8 @@ public class HLog implements Syncable {
       }
     }
     // BREADCRUMB (Fran): Remove dir as Path
-    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
-    if(!isBkWalEnabled) {
-      Path dir = new Path(this.dirUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
+    if (HLog.isHdfsUri(baseUri)) {
+      Path dir = new Path(this.baseUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
       Path oldLogDir = new Path(this.oldLogDirUri); // BREADCRUMB (Fran): Change HLog constructor to use URI
       this.blocksize = conf.getLong("hbase.regionserver.hlog.blocksize",
           getDefaultBlockSize(dir));
@@ -404,10 +399,12 @@ public class HLog implements Syncable {
           throw new IOException("Unable to mkdir " + oldLogDir);
         }
       }
-    } else { // FIXME (Fran): BK specific stuff initialization
-	this.blocksize = 0L;
-	this.logrollsize = 0L;
-	this.optionalFlushInterval = 0L;
+    } else if (HLog.isDummyUri(baseUri) || HLog.isBookKeeperUri(baseUri)) {
+      this.blocksize = 0L;
+      this.logrollsize = 0L;
+      this.optionalFlushInterval = 0L;
+    } else {
+      throw new IOException("Invalid hlog hbase URI " + baseUri);
     }
     this.maxLogs = conf.getInt("hbase.regionserver.maxlogs", 32);
     this.minTolerableReplication = conf.getInt(
@@ -430,7 +427,7 @@ public class HLog implements Syncable {
     // rollWriter sets this.hdfs_out if it can.
     rollWriter();
 
-    if(!isBkWalEnabled) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+    if(HLog.isHdfsUri(baseUri)) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
       // handle the reflection necessary to call getNumCurrentReplicas()
       this.getNumCurrentReplicas = getGetNumCurrentReplicas(this.hdfs_out);
     } // Do nothing on the else part for BK
@@ -604,7 +601,7 @@ public class HLog implements Syncable {
     this.cacheFlushLock.lock();
     this.logRollRunning = true;
     try {
-      if (HLog.isHdfsUri(dirUri)) { // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
+      if (HLog.isHdfsUri(baseUri)) { // BREADCRUMB (Fran): computeFilename() now returns a URI instead of Path
         // Do all the preparation outside of the updateLock to block
         // as less as possible the incoming writes
         long currentFilenum = this.filenum;
@@ -646,17 +643,17 @@ public class HLog implements Syncable {
                      " for " + FSUtils.getPath(newPath));
           }
         }
-      } else if (HLog.isDummyUri(dirUri)
-                 || HLog.isBookKeeperUri(dirUri)) {
+      } else if (HLog.isDummyUri(baseUri)
+                 || HLog.isBookKeeperUri(baseUri)) {
         if (this.writer != null) {
           this.writer.close();
         }
         this.writer = null;
 
         this.writer = new MultiplexWriter();
-        this.writer.init(fs, dirUri, conf);
+        this.writer.init(fs, baseUri, conf);
       } else {
-        LOG.error("Unknown dir URI" + dirUri);
+        LOG.error("Unknown dir URI" + baseUri);
       }
 
       this.numEntries.set(0);
@@ -891,7 +888,7 @@ public class HLog implements Syncable {
   }
 
   private void archiveLogFile(final URI uri, final Long seqno) throws IOException { // BREADCRUMB (Fran): Now archiveLogFile gets a URI
-    if (!isBkWalEnabled) {
+    if (HLog.isHdfsUri(uri)) {
       Path oldLogDir = new Path(oldLogDirUri); // BREADCRUMB (Fran): Remove oldLogDir as Path
       Path p = new Path(uri);
       Path newPath = getHLogArchivePath(oldLogDir, p);
@@ -927,7 +924,7 @@ public class HLog implements Syncable {
     if (filenum < 0) {
       throw new RuntimeException("hlog file number can't be < 0");
     }
-    return createUri(dirUri, prefix + "." + filenum); // BREADCRUMB (Fran): Don't use Path to create the URI
+    return createUri(baseUri, prefix + "." + filenum); // BREADCRUMB (Fran): Don't use Path to create the URI
   }
 
   private static URI createUri(URI parent, String pathChunk) { // BREADCRUMB (Fran): Don't use Path to create the URI BREADCRUMB (Fran): Use URI in HLog#getRegionDirRecoveredEditsDir() and return a URI
@@ -1001,8 +998,8 @@ public class HLog implements Syncable {
   public void closeAndDelete() throws IOException {
     close();
     // BREADCRUMB (Fran): Remove dir as Path
-    if(!isBkWalEnabled) {
-      Path dir = new Path(dirUri);
+    if(HLog.isHdfsUri(baseUri)) {
+      Path dir = new Path(baseUri);
       Path oldLogDir = new Path(oldLogDirUri); // BREADCRUMB (Fran): Remove oldLogDir as Path
       if (!fs.exists(dir)) return;
       FileStatus[] files = fs.listStatus(dir);
@@ -1048,7 +1045,7 @@ public class HLog implements Syncable {
       synchronized (updateLock) {
         this.closed = true;
         if (LOG.isDebugEnabled()) {
-          LOG.debug("closing hlog writer in " + this.dirUri.toString()); // BREADCRUMB (Fran): Remove dir as Path
+          LOG.debug("closing hlog writer in " + this.baseUri.toString()); // BREADCRUMB (Fran): Remove dir as Path
         }
         if (this.writer != null) {
           this.writer.close();
@@ -1328,7 +1325,7 @@ public class HLog implements Syncable {
    */
   int getLogReplication()
   throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-    if (!isBkWalEnabled) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
+    if (HLog.isHdfsUri(baseUri)) { // BREADCRUMB (Fran): Isolate hdfs_out and getNumCurrentReplicas
       if (this.getNumCurrentReplicas != null && this.hdfs_out != null) {
         Object repl = this.getNumCurrentReplicas.invoke(getOutputStream(), NO_ARGS);
         if (repl instanceof Integer) {
@@ -1381,7 +1378,7 @@ public class HLog implements Syncable {
       // coprocessor hook:
       if (!coprocessorHost.preWALWrite(info, logKey, logEdit)) {
         // if not bypassed:
-        LOG.info(dirUri);
+        LOG.info(baseUri);
         this.writer.append(new HLog.Entry(logKey, logEdit));
       }
       long took = System.currentTimeMillis() - now;
@@ -1670,7 +1667,7 @@ public class HLog implements Syncable {
    * @return dir
    */
   protected Path getDir() {
-    return new Path(dirUri); // BREADCRUMB (Fran): Modified to pass dirUri as Path
+    return new Path(baseUri); // BREADCRUMB (Fran): Modified to pass dirUri as Path
   }
   
   public static boolean validateHLogFilename(String filename) {
@@ -1707,7 +1704,8 @@ public class HLog implements Syncable {
    * @return Files in passed <code>regiondir</code> as a sorted set.
    * @throws IOException
    */
-  public static NavigableSet<URI> getSplitEditFilesSorted(final FileSystem fs,
+  public static NavigableSet<URI> getSplitEditFilesSorted(final Configuration conf,
+                                                          final FileSystem fs,
                                                           final URI regiondir)
   // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
   throws IOException {
@@ -1749,15 +1747,18 @@ public class HLog implements Syncable {
       }
     } else if (isDummyUri(regiondir)) {
       // Fixed set of logs for dummy
-      String[] parts = regiondir.getSchemeSpecificPart().replaceAll("^//", "").replaceAll("\\?.+$", "").split("/");
-      if (parts.length == 2
-          && !parts[0].equals(".META.")
-          && !parts[0].equals("-ROOT-")) {
-        filesSorted.add(URI.create(regiondir.toString() + "/00001?keyprefix=foobar&count=10"));
-        filesSorted.add(URI.create(regiondir.toString() + "/00201?keyprefix=foobaz&count=100"));
-        filesSorted.add(URI.create(regiondir.toString() + "/00401?keyprefix=barfoo&count=1000"));
+      BookKeeperHLogHelper.LogSpec spec = BookKeeperHLogHelper.parseRegionUri(regiondir);
+      if (!spec.getTable().equals(".META.")
+          && !spec.getTable().equals("-ROOT-")) {
+        filesSorted.add(BookKeeperHLogHelper.logUriFromRegionUriWithQS(regiondir,
+                            1, "?keyprefix=foobar&count=10"));
+        filesSorted.add(BookKeeperHLogHelper.logUriFromRegionUriWithQS(regiondir,
+                            201, "?keyprefix=foobaz&count=100"));
+        filesSorted.add(BookKeeperHLogHelper.logUriFromRegionUriWithQS(regiondir,
+                            401, "?keyprefix=barfoo&count=1000"));
       }
     } else if (isBookKeeperUri(regiondir)) {
+      filesSorted.addAll(BookKeeperHLogHelper.listLogs(conf, regiondir));
     }
     return filesSorted;
   }
@@ -1772,7 +1773,7 @@ public class HLog implements Syncable {
   public static URI moveAsideBadEditsFile(final FileSystem fs, // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
       final URI editsUri)
   throws IOException {
-    if(!isBkWalEnabled) { // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
+    if(HLog.isHdfsUri(editsUri)) { // BREADCRUMB (Fran): Use URI in HLog#moveAsideBadEditsFile() and return a URI
       Path edits = new Path(editsUri);
       Path moveAsideName = new Path(edits.getParent(), edits.getName() + "." +
         System.currentTimeMillis());

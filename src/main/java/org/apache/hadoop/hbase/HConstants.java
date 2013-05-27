@@ -549,14 +549,7 @@ public final class HConstants {
   /**
    * Properties that are related to the WAL implementation with BK. The prefix used is "hbase.bk.wal" 
    */
-  public static final String HBASE_BK_WAL_ENABLED_KEY = "hbase.bk.wal.enabled";
-  /** by default the BK WAL mechanism is disabled and the standard one is used */
-  public static final boolean HBASE_BK_WAL_ENABLED_DEFAULT = false;
-  /** hack stuff */
-  public static final String HBASE_BK_WAL_DUMMY_KEY = "hbase.bk.wal.dummy";
-  /** false by default */
-  public static final boolean HBASE_BK_WAL_DUMMY_DEFAULT = false;
-
+  public static final String HBASE_WAL_BASEURI = "hbase.wal.baseuri";
   
   private HConstants() {
     // Can't be instantiated with this ctor.

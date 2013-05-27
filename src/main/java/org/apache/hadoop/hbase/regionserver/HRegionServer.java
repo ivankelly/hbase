@@ -158,8 +158,8 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 
-import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
-import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
+import static org.apache.hadoop.hbase.HConstants.HBASE_WAL_BASEURI;
+
 /**
  * HRegionServer makes a set of HRegions available to clients. It checks in with
  * the HMaster. There are many HRegionServers in a single HBase deployment.
@@ -1192,24 +1192,10 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
    * @throws IOException
    */
   private HLog setupWALAndReplication() throws IOException {
-    boolean isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
-    if (isBkWalEnabled) { // BREADCRUMB (Fran): Change HLog constructor to use URI
-      if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
-                          HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
-        URI logDir = URI.create("dummy://"
-                  + new String(conf.get(HConstants.HBASE_DIR))
-                  + "/" 
-                  + new String(HLog.getHLogDirectoryName(this.serverNameFromMasterPOV.toString())));
-        URI oldLogDir = URI.create("dummy://"
-                  + new String(conf.get(HConstants.HBASE_DIR))
-                  + "/" 
-                  + new String(HConstants.HREGION_OLDLOGDIR_NAME));
-        return instantiateHLog(logDir, oldLogDir);
-      } else { // FIXME (Fran): Initialize BK log instantiation with the right directories
-        URI logDir = URI.create("bk://logdir");
-        URI oldLogDir = URI.create("bk://oldlogdir");
-        return instantiateHLog(logDir, oldLogDir);
-      }
+    String baseUriStr = conf.get(HConstants.HBASE_WAL_BASEURI);
+    if (baseUriStr != null && !HLog.isHdfsUri(URI.create(baseUriStr))) {
+      URI baseUri = URI.create(baseUriStr);
+      return instantiateHLog(baseUri, null);
     } else {
       final Path oldLogDir = new Path(rootDir, HConstants.HREGION_OLDLOGDIR_NAME);
       Path logdir = new Path(rootDir,

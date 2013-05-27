@@ -19,6 +19,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Entry;
 import org.apache.hadoop.hbase.util.Writables;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 public class DummyLogReader implements HLog.Reader {
 
@@ -26,7 +28,7 @@ public class DummyLogReader implements HLog.Reader {
 
   private static final String PWD = "pwd";
 
-  private String keyprefix = "";
+  private String keyprefix = "default-";
   private long read = 0;
   private long count = 100;
   private long seqid = 0;
@@ -41,30 +43,33 @@ public class DummyLogReader implements HLog.Reader {
   @Override
   public void init(FileSystem fs, URI uri, Configuration c)
     throws IOException {
-    if (!uri.getScheme().equals("dummy")) {
+    if (!uri.getScheme().equals("dummy") && !uri.getScheme().equals("bookkeeper")) {
       throw new IOException("Invalid uri scheme " + uri.getScheme());
     }
 
-    String[] parts = uri.getSchemeSpecificPart().replaceAll("^//", "").replaceAll("\\?.+$", "").split("/");
-    if (parts.length != 3) {
-      throw new IOException("URI format is "
-                            + "dummy:<table>/<region>/<sequence>?keyprefix=<prefix>&count=<count>"
-                            + " parts.length = " + parts.length + ", path = " + uri.getPath());
-    }
-    table = parts[0].getBytes();
-    region = parts[1].getBytes();
-    seqid = Long.valueOf(parts[2]);
+    BookKeeperHLogHelper.LogSpec spec = BookKeeperHLogHelper.parseRegionUri(uri);
 
-    String[] query = uri.getQuery().split("&");
-    for (String item : query) {
-      String[] itemparts = item.split("=");
-      if (itemparts.length != 2) {
-        throw new IOException("Invalid query string item " + item);
-      }
-      if (itemparts[0].equals("keyprefix")) {
-        keyprefix = itemparts[1];
-      } else if (itemparts[0].equals("count")) {
-        count = Long.valueOf(itemparts[1]);
+    table = spec.getTable().getBytes();
+    region = spec.getRegion().getBytes();
+    if (!spec.hasSeqNum()) {
+      throw new IOException("URI has no sequence number: "+ uri);
+    }
+    seqid = spec.getSeqNum();
+
+    Pattern p = Pattern.compile("\\?(.*)$");
+    Matcher m = p.matcher(uri.toString());
+    if (m.find()) {
+      String[] query = m.group(1).split("&");
+      for (String item : query) {
+        String[] itemparts = item.split("=");
+        if (itemparts.length != 2) {
+          throw new IOException("Invalid query string item " + item);
+        }
+        if (itemparts[0].equals("keyprefix")) {
+          keyprefix = itemparts[1];
+        } else if (itemparts[0].equals("count")) {
+          count = Long.valueOf(itemparts[1]);
+        }
       }
     }
   }

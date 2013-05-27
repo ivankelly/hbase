@@ -21,14 +21,38 @@ import org.apache.hadoop.hbase.client.Result;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.NavigableSet;
 
 import org.junit.Test;
 
-public class TestDummyLogCluster {
+public class TestBKUriDummyImpl {
   private static final Log LOG = LogFactory.getLog(TestDummyLogCluster.class);
 
-  @Test
+  @Test(timeout=60000)
+  public void testRegionLogZK() throws Exception {
+    BookKeeperHLogHelper.reset();
+    HBaseTestingUtility testUtil = new HBaseTestingUtility();
+    Configuration conf = testUtil.getConfiguration();
+    URI uri = BookKeeperHLogHelper.regionUriFromBase(URI.create("bookkeeper:/hbasewal"),
+                                                     "testTable", "testRegion");
+    testUtil.startMiniZKCluster();
+    BookKeeperHLogHelper.addLogForRegion(conf, uri, 1, 1);
+    BookKeeperHLogHelper.addLogForRegion(conf, uri, 2, 2);
+    BookKeeperHLogHelper.addLogForRegion(conf, uri, 3, 3);
+
+    NavigableSet<URI> uris = BookKeeperHLogHelper.listLogs(conf, uri);
+    assertEquals("There should be 3", uris.size(), 3);
+    int i = 1;
+    for (URI u : uris) {
+      assertEquals("Wrong ledger id", BookKeeperHLogHelper.getLedgerIdForURI(conf, u), i++);
+    }
+
+    testUtil.shutdownMiniZKCluster();
+  }
+
+  @Test(timeout=60000)
   public void testCluster() throws Exception {
+    BookKeeperHLogHelper.reset();
     HBaseTestingUtility testUtil = new HBaseTestingUtility();
     Configuration conf = testUtil.getConfiguration();
     conf.setBoolean("dfs.support.append", true);
@@ -36,48 +60,20 @@ public class TestDummyLogCluster {
     conf.setInt("dfs.client.block.recovery.retries", 2);
     byte[] colFam = "DummyFamily".getBytes();
     byte[] col = "DummyCol".getBytes();
+    String baseUri = "bookkeeper:/hbasewal";
+    String tableName = "testTable";
+    String region = "testRegion";
 
     conf = HBaseConfiguration.addHbaseResources(conf);
-    conf.set(HConstants.HBASE_WAL_BASEURI, "dummy:test");
+
+    conf.set(HConstants.HBASE_WAL_BASEURI, baseUri);
     conf.set("hbase.regionserver.hlog.reader.impl",
              "org.apache.hadoop.hbase.regionserver.wal.bk.DummyLogReader");
     conf.set("hbase.regionserver.hlog.writer.impl",
              "org.apache.hadoop.hbase.regionserver.wal.bk.DummyLogWriter");
     testUtil.startMiniCluster();
 
-    HTable table = testUtil.createTable("testTable".getBytes(), colFam);
-
-    Get g = new Get("foobar-1".getBytes());
-    Result res = table.get(g);
-    assertTrue("Should have column", res.containsColumn(colFam, col));
-    assertEquals("Should match", new String(res.getValue(colFam, col)), "Value-1");
-
-    g = new Get("foobar-10".getBytes());
-    res = table.get(g);
-    assertTrue("Should have column", res.containsColumn(colFam, col));
-    assertEquals("Should match", new String(res.getValue(colFam, col)), "Value-10");
-
-    g = new Get("foobar-11".getBytes());
-    res = table.get(g);
-    assertFalse("Should not have column", res.containsColumn(colFam, col));
-
-    g = new Get("foobaz-200".getBytes());
-    res = table.get(g);
-    assertFalse("Should not have column", res.containsColumn(colFam, col));
-
-    g = new Get("foobaz-201".getBytes());
-    res = table.get(g);
-    assertTrue("Should have column", res.containsColumn(colFam, col));
-    assertEquals("Should match", new String(res.getValue(colFam, col)), "Value-201");
-
-    g = new Get("foobaz-300".getBytes());
-    res = table.get(g);
-    assertTrue("Should have column", res.containsColumn(colFam, col));
-    assertEquals("Should match", new String(res.getValue(colFam, col)), "Value-300");
-
-    g = new Get("foobaz-301".getBytes());
-    res = table.get(g);
-    assertFalse("Should not have column", res.containsColumn(colFam, col));
+    HTable table = testUtil.createTable(tableName.getBytes(), colFam);
 
     int count = 0;
     for (Map.Entry<URI, Writer> e: DummyLogWriter.regionWriters.entrySet()) {
@@ -85,10 +81,15 @@ public class TestDummyLogCluster {
                + " Writer " + ((DummyLogWriter)e.getValue()).getLength());
       count++;
     }
-    Put p = new Put(Bytes.toBytes("foobaz-202"));
-    p.add(colFam, col, Bytes.toBytes("Value-test"));
 
+    Put p = new Put(Bytes.toBytes("testPutWithBKWAL"));
+    p.add(colFam, col, Bytes.toBytes("testPutWithBKWAL-val"));
     table.put(p);
+
+    Get g = new Get("testPutWithBKWAL".getBytes());
+    Result res = table.get(g);
+    assertTrue("Should have column", res.containsColumn(colFam, col));
+    assertEquals("Should match", new String(res.getValue(colFam, col)), "testPutWithBKWAL-val");
 
     int count2 = 0;
     for (Map.Entry<URI, Writer> e: DummyLogWriter.regionWriters.entrySet()) {
@@ -97,5 +98,7 @@ public class TestDummyLogCluster {
       count2++;
     }
     assertEquals("There should be another log ", count2, count+1);
+
+    testUtil.shutdownMiniCluster();
   }
 }

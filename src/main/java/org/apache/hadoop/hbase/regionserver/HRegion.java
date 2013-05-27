@@ -19,9 +19,6 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
-import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_DEFAULT;
-import static org.apache.hadoop.hbase.HConstants.HBASE_BK_WAL_ENABLED_KEY;
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -52,6 +49,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -100,6 +99,7 @@ import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.regionserver.wal.bk.BookKeeperHLogHelper;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.CancelableProgressable;
 import org.apache.hadoop.hbase.util.ClassSize;
@@ -215,7 +215,7 @@ public class HRegion implements HeapSize { // , Writable{
   final HRegionInfo regionInfo;
   final Path regiondir;
   final URI regionWalUri; // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
-  private static boolean isBkWalEnabled; // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+
   KeyValue.KVComparator comparator;
 
   private ConcurrentHashMap<RegionScanner, Long> scannerReadPoints;
@@ -373,20 +373,23 @@ public class HRegion implements HeapSize { // , Writable{
     String encodedNameStr = this.regionInfo.getEncodedName();
     setHTableSpecificConf();
     this.regiondir = getRegionDir(this.tableDir, encodedNameStr);
-    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT);
-    if (isBkWalEnabled) {
-      if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
-                          HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
-        this.regionWalUri = URI.create("dummy://"
-            + new String(regionInfo.getTableName(), Charsets.UTF_8)
-            + "/" + regionInfo.getEncodedName());
-      } else {
-        this.regionWalUri = URI.create("bk://blah/foobar/fixme");
-      }
-    } else {
-      this.regionWalUri = this.regiondir.toUri(); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
-    }
 
+    String baseUriStr = conf.get(HConstants.HBASE_WAL_BASEURI);
+    if (baseUriStr == null) {
+      this.regionWalUri = this.regiondir.toUri();
+    } else {
+      URI baseUri = URI.create(baseUriStr);
+      if (HLog.isHdfsUri(baseUri)) {
+        this.regionWalUri = this.regiondir.toUri();
+      } else if (HLog.isDummyUri(baseUri) || HLog.isBookKeeperUri(baseUri)) {
+        this.regionWalUri =
+          BookKeeperHLogHelper.regionUriFromBase(baseUri,
+              new String(regionInfo.getTableName(), Charsets.UTF_8),
+              regionInfo.getEncodedName());
+      } else {
+        throw new RuntimeException("Invalid WAL base URI " + baseUri);
+      }
+    }
     this.scannerReadPoints = new ConcurrentHashMap<RegionScanner, Long>();
 
     // don't initialize coprocessors if not running within a regionserver
@@ -2330,11 +2333,11 @@ public class HRegion implements HeapSize { // , Writable{
       throws UnsupportedEncodingException, IOException {
     long seqid = minSeqId;
 //    Path regiondirPath = new Path(regiondir); // BREADCRUMB (Fran): Use URI in HRegion#replayRecoveredEditsIfAny()
-    NavigableSet<URI> files = HLog.getSplitEditFilesSorted(this.fs, regiondir); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    NavigableSet<URI> files = HLog.getSplitEditFilesSorted(conf, this.fs, regiondir); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
     if (files == null || files.isEmpty()) return seqid;
     boolean checkSafeToSkip = true;
     for (URI edits: files) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
-      if(!isBkWalEnabled) {
+      if (HLog.isHdfsUri(regiondir)) {
         Path editsPath = new Path(edits); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
         if (editsPath == null || !this.fs.exists(editsPath)) {
           LOG.warn("Null or non-existent edits file: " + editsPath);
@@ -2350,8 +2353,12 @@ public class HRegion implements HeapSize { // , Writable{
         long maxSeqId = Long.MAX_VALUE;
         if (higher != null) {
           // Edit file name pattern, HLog.EDITFILES_NAME_PATTERN: "-?[0-9]+"
-          String fileName = getFileNameFromUri(higher); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
-          maxSeqId = Math.abs(Long.parseLong(fileName));
+          try {
+            String seqNum = getSeqNumFromUri(higher);
+            maxSeqId = Math.abs(Long.parseLong(seqNum));
+          } catch (IOException ioe) {
+            continue;
+          }
         }
         if (maxSeqId <= minSeqId) {
           String msg = "Maximum possible sequenceid for this log is " + maxSeqId
@@ -2390,7 +2397,7 @@ public class HRegion implements HeapSize { // , Writable{
     }
     // Now delete the content of recovered edits.  We're done w/ them.
     for (URI file: files) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
-      if(!isBkWalEnabled) {
+      if(HLog.isHdfsUri(file)) {
         Path filePath = new Path(file); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
         if (!this.fs.delete(filePath, false)) {
           LOG.error("Failed delete of " + filePath);
@@ -2406,10 +2413,13 @@ public class HRegion implements HeapSize { // , Writable{
 
   public static final String SEPARATOR = "/"; // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
   
-  public String getFileNameFromUri(URI uri) { // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
-    String path = uri.getPath();
-    int slash = path.lastIndexOf(SEPARATOR);
-    return path.substring(slash+1);
+  public String getSeqNumFromUri(URI uri) throws IOException {
+    Pattern p = Pattern.compile("/(\\d+)[^/]*$");
+    Matcher m = p.matcher(uri.toString());
+    if (!m.find()) {
+      throw new IOException("Couldn't find sequence number in " + uri.toString());
+    }
+    return m.group(1);
   }
   
   /*
@@ -3275,27 +3285,15 @@ public class HRegion implements HeapSize { // , Writable{
     fs.mkdirs(regionDir);
     HLog effectiveHLog = hlog;
     // Initialization must happen here, not in constructor (which is just for tests)
-    isBkWalEnabled = conf.getBoolean(HBASE_BK_WAL_ENABLED_KEY, HBASE_BK_WAL_ENABLED_DEFAULT); // BREADCRUMB (Fran): Change HLog constructor to use URI
+
     if (hlog == null) {
-      if (isBkWalEnabled) { // BREADCRUMB (Fran): Change HLog constructor to use URI
-        if (conf.getBoolean(HConstants.HBASE_BK_WAL_DUMMY_KEY,
-                            HConstants.HBASE_BK_WAL_DUMMY_DEFAULT)) {
-          URI regionWalDirUri = URI.create("dummy://"
-                              + new String(info.getTableName(), Charsets.UTF_8)
-                              + "/" + info.getEncodedName()
-                              + "/" + HConstants.HREGION_LOGDIR_NAME);
-          URI regionWalOldDirUri = URI.create("dummy://"
-                  + new String(info.getTableName(), Charsets.UTF_8)
-                  + "/" + info.getEncodedName()
-                  + "/" + HConstants.HREGION_OLDLOGDIR_NAME);
-          effectiveHLog = new HLog(fs, regionWalDirUri, regionWalOldDirUri, conf);
-        } else {
-          effectiveHLog = new HLog(fs, URI.create("bk://blah/foobar/fixme"), // FIXME (Fran): Create proper URIs for BK
-                  URI.create("bk://blah/foobar/fixme"), conf);
-        }
+      String baseUriStr = conf.get(HConstants.HBASE_WAL_BASEURI);
+      if (baseUriStr != null && !HLog.isHdfsUri(URI.create(baseUriStr))) {
+        URI baseUri = URI.create(baseUriStr);
+        effectiveHLog = new HLog(fs, baseUri, null, conf);
       } else {
-        effectiveHLog = new HLog(fs, new Path(regionDir, HConstants.HREGION_LOGDIR_NAME).toUri(), // BREADCRUMB (Fran): Change HLog constructor to use URI
-                new Path(regionDir, HConstants.HREGION_OLDLOGDIR_NAME).toUri(), conf); // BREADCRUMB (Fran): Change HLog constructor to use URI
+        effectiveHLog = new HLog(fs, new Path(regionDir, HConstants.HREGION_LOGDIR_NAME).toUri(),
+            new Path(regionDir, HConstants.HREGION_OLDLOGDIR_NAME).toUri(), conf);
       }
     }
     HRegion region = HRegion.newHRegion(tableDir,

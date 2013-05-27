@@ -72,7 +72,8 @@ public class TestHLogMethods {
     createFile(fs, recoverededits, last);
     createFile(fs, recoverededits,
       Long.toString(Long.MAX_VALUE) + "." + System.currentTimeMillis());
-    NavigableSet<URI> files = HLog.getSplitEditFilesSorted(fs, regiondir.toUri()); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
+    NavigableSet<URI> files = HLog.getSplitEditFilesSorted(util.getConfiguration(),
+                                                           fs, regiondir.toUri());
     assertEquals(7, files.size());
     assertEquals(new Path(files.pollFirst()).getName(), first); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
     assertEquals(new Path(files.pollLast()).getName(), last); // BREADCRUMB (Fran): Use URI in HLog#getSplitEditFilesSorted() and return a NavigableSet<URI>
